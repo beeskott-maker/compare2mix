@@ -143,6 +143,22 @@ def is_rekordbox_export(path: str | os.PathLike) -> bool:
     return bool(m) and m.group(1).strip().lower() == "rekordbox"
 
 
+PROCESSED_MARK = "(traité)"
+
+
+def is_processed(path: str | os.PathLike) -> bool:
+    """An export compare2mix already used (renamed "… (traité).xml")."""
+    return PROCESSED_MARK in Path(path).stem
+
+
+def mark_processed(path: str | os.PathLike) -> Path:
+    """Rename an export to "<name> (traité).xml" so it is not read again."""
+    path = Path(path)
+    dest = _unique_destination(path.parent, f"{path.stem} {PROCESSED_MARK}{path.suffix}")
+    path.rename(dest)
+    return dest
+
+
 def find_rekordbox_export(folder: str | os.PathLike,
                           min_age_s: float = MIN_AGE_S) -> Path | None:
     """Most recent finished Rekordbox XML export directly in ``folder``."""
@@ -152,7 +168,8 @@ def find_rekordbox_export(folder: str | os.PathLike,
     now = time.time()
     candidates = []
     for p in folder.iterdir():
-        if p.suffix.lower() != ".xml" or p.name.startswith(".") or not p.is_file():
+        if (p.suffix.lower() != ".xml" or p.name.startswith(".") or is_processed(p)
+                or not p.is_file()):
             continue
         try:
             st = p.stat()

@@ -801,7 +801,8 @@ async function runTransfer() {
       + (ok < sel.length ? ` · ${sel.length - ok} en erreur` : "") + ".";
     $("doneText").replaceChildren(el("b", {}, "compare2mix-import.xml"),
       ` est prêt : playlist « ${x.playlist} » avec ses ${x.existing} morceaux actuels + `, el("b", {}, x.new),
-      ` nouveau${x.new > 1 ? "x" : ""}.`);
+      ` nouveau${x.new > 1 ? "x" : ""}.`,
+      ...(x.export_archived ? [el("div", { class: "note" }, `Ton export Rekordbox a été renommé « ${x.export_archived} » dans Téléchargements : il ne sera plus relu.`)] : []));
     $("xmlPath").textContent = x.path;
     $("howtoPlaylist").textContent = x.playlist;
     $("doneCard").hidden = false;

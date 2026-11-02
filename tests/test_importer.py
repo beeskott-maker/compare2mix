@@ -334,3 +334,23 @@ def test_target_name():
     # Already named that way: unchanged, even with another case or spacing.
     ok = Track("5 Mins Of Acid", ["KI_KI"], location="/d/ki_ki  -  5 mins of acid.mp3")
     assert importer.target_name(ok, sp, ".mp3") == "ki_ki  -  5 mins of acid.mp3"
+
+
+def test_export_renamed_after_transfer(env, tmp_path):
+    tmp, app, call = env
+    dl = tmp / "Downloads"
+    export = dl / "rekordbox.xml"
+    dl.mkdir(exist_ok=True)
+    export.write_bytes((FIX / "rekordbox_sample.xml").read_bytes())
+    old = time.time() - 60
+    os.utime(export, (old, old))
+    assert call("/api/library/from-downloads", {})["just_loaded"] == "rekordbox.xml"
+    make_wav(dl / "whatever.wav", title="Some Unknown Track", artist="Nobody")
+    m = call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")["matches"][0]
+    call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"]})
+    x = call("/api/import-xml", {})
+    assert x["export_archived"] == "rekordbox (traité).xml"
+    assert not export.exists() and (dl / "rekordbox (traité).xml").exists()
+    # The renamed export is no longer picked up, the library stays loaded.
+    assert importer.find_rekordbox_export(dl, min_age_s=0) is None
+    assert call("/api/library/from-downloads", {})["just_loaded"] is None

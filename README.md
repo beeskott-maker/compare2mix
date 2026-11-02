@@ -77,7 +77,8 @@ en 5 étapes :
    déjà ce nom ; le nouveau nom est affiché ici. **Rien n'est déplacé ici.**
 5. **Copie & XML** : « Lancer la copie » déplace les fichiers cochés vers la clé avec une barre de
    progression, puis génère le fichier XML à importer dans Rekordbox (bouton de téléchargement et
-   mode d'emploi).
+   mode d'emploi). L'export Rekordbox lu dans Téléchargements est alors renommé
+   « … (traité).xml » : il ne sera plus relu (la bibliothèque reste chargée).
 
 « Tracks absents de la clé » : morceaux de ta collection Rekordbox dont le fichier n'est pas sur la
 clé USB (restés sur le Mac, liens Apple Music…) et, clé branchée, ceux dont le fichier n'y est

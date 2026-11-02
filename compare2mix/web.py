@@ -572,7 +572,25 @@ class App:
                            "clé qui n'est pas branchée.", 409, "volume")
         name = self._import_playlist_name()
         return {"path": path, "playlist": name,
-                "existing": len(self.rb_playlists.get(name, [])), "new": len(pending)}
+                "existing": len(self.rb_playlists.get(name, [])), "new": len(pending),
+                "export_archived": self.archive_downloads_export()}
+
+    def archive_downloads_export(self) -> str | None:
+        """Rename the Rekordbox export read from Downloads ("… (traité).xml") so
+        it is not taken again; the library itself stays loaded (saved copy)."""
+        with self.library_lock:
+            s = self.settings
+            if s.get("library_origin") != "downloads" or not s.get("library_source"):
+                return None
+            src = Path(s["library_source"].split("|")[0])
+            if not src.is_file() or importer.is_processed(src):
+                return None
+            try:
+                dest = importer.mark_processed(src)
+            except OSError:
+                return None
+            config.update(self.config_path, library_source=f"{dest}|archived")
+        return dest.name
 
     def import_download(self, source: str, spotify_key: str) -> dict:
         path = Path(source)
