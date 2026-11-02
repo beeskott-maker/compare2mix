@@ -65,6 +65,7 @@
   .card.missing { border-left-color: var(--missing); }
   .line1 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
   .sp { font-weight: 600; overflow-wrap: anywhere; }
+  a.sp { cursor: copy; }
   .muted { color: var(--muted); font-size: 13px; }
   .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--muted); }
   .badge.manual { background: var(--found-bg); color: var(--found); }
@@ -191,6 +192,19 @@ function toast(msg, error = false) {
   t.className = "toast show" + (error ? " error" : "");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (t.className = "toast"), error ? 6000 : 2500);
+}
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback for browsers that refuse the async clipboard API.
+    const ta = el("textarea", { style: "position:fixed;opacity:0" }, text);
+    document.body.append(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    if (!ok) throw new Error("Copie impossible");
+  }
 }
 async function api(path, body) {
   const opts = body === undefined ? {} : {
@@ -339,7 +353,7 @@ $("exportBtn").addEventListener("click", () => {
 });
 $("copyBtn").addEventListener("click", async () => {
   const lines = state.data.results.filter((r) => r.status === "missing").map((r) => r.spotify.display);
-  try { await navigator.clipboard.writeText(lines.join("\n")); toast(`${lines.length} morceaux copiés`); }
+  try { await copyText(lines.join("\n")); toast(`${lines.length} morceaux copiés`); }
   catch { toast("Copie impossible", true); }
 });
 
@@ -381,8 +395,19 @@ const ICON = { found: "✅", probable: "🟡", missing: "❌" };
 
 function card(r) {
   const c = el("div", { class: "card " + r.status, "data-key": r.key });
+  // Click = copy the Spotify link (same as "Copier le lien vers le titre");
+  // Cmd/Ctrl+click still opens the track in Spotify.
   const spTitle = r.spotify.url
-    ? el("a", { href: r.spotify.url, target: "_blank", rel: "noopener", class: "sp" }, r.spotify.display)
+    ? el("a", {
+        href: r.spotify.url, target: "_blank", rel: "noopener", class: "sp",
+        title: "Cliquer pour copier le lien Spotify (Cmd+clic pour l'ouvrir)",
+        onclick: async (e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          e.preventDefault();
+          try { await copyText(r.spotify.url); toast("Lien Spotify copié"); }
+          catch (err) { toast(err.message, true); }
+        },
+      }, r.spotify.display)
     : el("span", { class: "sp" }, r.spotify.display);
   c.append(el("div", { class: "line1" },
     el("span", {}, ICON[r.status]), spTitle,
