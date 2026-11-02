@@ -779,8 +779,8 @@ async function runTransfer() {
   for (let i = 0; i < sel.length; i++) {
     mark(lis[i], "run", "◐");
     try {
-      await api("/api/import", { source: sel[i].source, spotify_key: sel[i].spotify_key });
-      mark(lis[i], "ok", "✓");
+      const r = await api("/api/import", { source: sel[i].source, spotify_key: sel[i].spotify_key });
+      mark(lis[i], "ok", "✓", "→ " + r.file + (r.renamed ? " (un fichier du même nom existait déjà)" : ""));
       ok++;
     } catch (e) {
       mark(lis[i], "err", "✗", e.message);

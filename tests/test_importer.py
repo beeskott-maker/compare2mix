@@ -184,9 +184,10 @@ def test_recap_then_transfer_then_xml(env):
 
     # Step 5: transfer the chosen file, then build the XML.
     m = r["matches"][0]
-    assert call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"]}) == \
-        {"imported": "Nobody – Some Unknown Track"}
+    res = call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"]})
     moved = tmp / "Music" / "whatever.wav"
+    assert res == {"imported": "Nobody – Some Unknown Track", "file": str(moved),
+                   "renamed": False}
     assert moved.exists() and not (tmp / "Downloads" / "whatever.wav").exists()
     x = call("/api/import-xml", {})
     assert (x["playlist"], x["existing"], x["new"]) == ("Warm up", 2, 1)

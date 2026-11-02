@@ -417,7 +417,9 @@ class App:
             "music_volume": importer.volume_root(music_dir),
             "keep_original": bool(s.get("keep_original", False)),
             # Empty = same name as the Spotify playlist being compared.
-            "import_playlist": s.get("import_playlist") or "",
+            # "compare2mix" was the old default: treat it as "not chosen".
+            "import_playlist": ("" if s.get("import_playlist") == "compare2mix"
+                                else s.get("import_playlist") or ""),
             "auto_import": s.get("auto_import", True),
             "import_xml": import_xml,
             "rekordbox_playlists": sorted(self.rb_playlists, key=str.lower),
@@ -578,7 +580,8 @@ class App:
             raise ApiError("Ce fichier a déjà été traité.")
         with self.scan_lock:
             entry = self._import(self._read_file(path), self._find_spotify_track(spotify_key))
-        return {"imported": entry.spotify_display}
+        return {"imported": entry.spotify_display, "file": entry.file,
+                "renamed": Path(entry.file).name != path.name}
 
     def ignore_download(self, source: str) -> None:
         self.imports.ignore(source)

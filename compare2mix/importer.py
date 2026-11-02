@@ -366,10 +366,14 @@ class ImportLog:
             )
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = _unique_destination(dest_dir, src.name)
+        size = src.stat().st_size
         if move:
             shutil.move(str(src), dest)
         else:
             shutil.copy2(src, dest)
+        # Never report success without the file really being there, complete.
+        if not dest.is_file() or dest.stat().st_size != size:
+            raise OSError(f"Le fichier n'a pas été écrit correctement dans {dest}.")
         # A file without usable tags only has its file name: describe it with
         # the Spotify track it was matched to, so Rekordbox shows a clean title.
         tagged = bool(file.artists)
