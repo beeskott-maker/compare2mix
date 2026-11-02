@@ -542,6 +542,8 @@ class App:
             "matches": [{
                 "source": p.file.location,
                 "name": Path(p.file.location).name,
+                "new_name": importer.target_name(p.file, p.spotify,
+                                                 Path(p.file.location).suffix.lower()),
                 "spotify_key": p.spotify.key,
                 "spotify": p.spotify.display,
                 "status": p.status.name.lower(),  # found / probable
@@ -579,9 +581,12 @@ class App:
         if self.imports.is_known(source):
             raise ApiError("Ce fichier a déjà été traité.")
         with self.scan_lock:
-            entry = self._import(self._read_file(path), self._find_spotify_track(spotify_key))
+            file, sp = self._read_file(path), self._find_spotify_track(spotify_key)
+            wanted = importer.target_name(file, sp, path.suffix.lower())
+            entry = self._import(file, sp)
+        # "renamed": a file with the same name was already there, so "(2)" was added.
         return {"imported": entry.spotify_display, "file": entry.file,
-                "renamed": Path(entry.file).name != path.name}
+                "renamed": Path(entry.file).name != wanted}
 
     def ignore_download(self, source: str) -> None:
         self.imports.ignore(source)

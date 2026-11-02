@@ -310,6 +310,26 @@ class ImportedTrack:
                      isrc=self.isrc, album=self.album, mix=self.mix, location=self.file)
 
 
+_BAD_CHARS = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
+
+
+def target_name(file: Track, spotify: Track, suffix: str) -> str:
+    """"ARTIST - TRACKNAME.ext" from the file's tags, or from the Spotify
+    track it was matched to when the file has no usable tags."""
+    tagged = bool(file.artists)
+    artists = list(file.artists if tagged else spotify.artists)
+    title = (file.title if tagged else spotify.title).strip()
+    if tagged and file.mix and file.mix.lower() not in title.lower():
+        title = f"{title} ({file.mix})"
+    name = f"{', '.join(artists)} - {title}" if artists else title
+    name = re.sub(r"\s+", " ", _BAD_CHARS.sub(" ", name)).strip(" .")[:200]
+    original = Path(file.location or "")
+    # Already named that way (give or take case and spaces): keep it as is.
+    if not name or " ".join(original.stem.split()).casefold() == name.casefold():
+        return original.name or name + suffix
+    return name + suffix
+
+
 def _unique_destination(dest_dir: Path, name: str) -> Path:
     dest = dest_dir / name
     stem, suffix = dest.stem, dest.suffix
@@ -365,7 +385,7 @@ class ImportLog:
                 f"La clé « {os.path.basename(volume_root(dest_dir) or '')} » n'est pas branchée."
             )
         dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = _unique_destination(dest_dir, src.name)
+        dest = _unique_destination(dest_dir, target_name(file, spotify, src.suffix.lower()))
         size = src.stat().st_size
         if move:
             shutil.move(str(src), dest)

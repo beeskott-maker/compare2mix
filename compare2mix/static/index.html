@@ -127,6 +127,7 @@
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.file .rename { color: var(--accent, #1e9e4a); margin-top: 4px; }
   td.file { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; min-width: 180px; }
   .status { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .status.found { background: var(--ok-bg); color: var(--ok); }
@@ -718,14 +719,15 @@ function renderRecap() {
       cb.addEventListener("change", () => { m.on = cb.checked; updateStart(); });
       return el("tr", {},
         el("td", {}, cb),
-        el("td", { class: "file" }, m.name),
+        el("td", { class: "file" }, m.name,
+          m.new_name !== m.name ? el("div", { class: "rename" }, "→ " + m.new_name) : null),
         el("td", {}, m.spotify),
         el("td", {}, el("span", { class: "status " + m.status },
           m.status === "found" ? `✅ sûr · ${Math.round(m.score)}` : `🟡 à vérifier · ${Math.round(m.score)}`),
           m.notes.length ? el("div", { class: "note" }, m.notes.join(" · ")) : null));
     });
     parts.push(el("div", { class: "tablewrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Fichier dans Téléchargements"), el("th", {}, "Morceau manquant"), el("th", {}, "Correspondance"))),
+      el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Fichier → nouveau nom"), el("th", {}, "Morceau manquant"), el("th", {}, "Correspondance"))),
       el("tbody", {}, rows))));
   } else {
     parts.push(el("p", { class: "lead" }, "Aucun fichier de Téléchargements ne correspond aux morceaux manquants pour l'instant. Télécharge-les, puis clique sur Revérifier."));
@@ -761,7 +763,7 @@ async function runTransfer() {
   $("doneCard").hidden = true;
   $("copyTitle").textContent = "Copie en cours…";
   $("copyLead").textContent = "Ne débranche pas la clé.";
-  const steps = [...sel.map((m) => `Copie de ${m.name}`), "Génération du fichier XML"];
+  const steps = [...sel.map((m) => `Copie de ${m.new_name || m.name}`), "Génération du fichier XML"];
   const lis = steps.map((s) => el("li", {}, el("span", { class: "ic" }, "○"), el("span", { class: "t" }, s)));
   $("tasks").replaceChildren(...lis);
   const setPct = (i) => {
@@ -780,7 +782,7 @@ async function runTransfer() {
     mark(lis[i], "run", "◐");
     try {
       const r = await api("/api/import", { source: sel[i].source, spotify_key: sel[i].spotify_key });
-      mark(lis[i], "ok", "✓", "→ " + r.file + (r.renamed ? " (un fichier du même nom existait déjà)" : ""));
+      mark(lis[i], "ok", "✓", "→ " + r.file + (r.renamed ? " (un fichier de ce nom existait déjà)" : ""));
       ok++;
     } catch (e) {
       mark(lis[i], "err", "✗", e.message);

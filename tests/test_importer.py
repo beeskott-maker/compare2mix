@@ -185,7 +185,8 @@ def test_recap_then_transfer_then_xml(env):
     # Step 5: transfer the chosen file, then build the XML.
     m = r["matches"][0]
     res = call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"]})
-    moved = tmp / "Music" / "whatever.wav"
+    moved = tmp / "Music" / "Nobody - Some Unknown Track.wav"
+    assert m["new_name"] == moved.name
     assert res == {"imported": "Nobody – Some Unknown Track", "file": str(moved),
                    "renamed": False}
     assert moved.exists() and not (tmp / "Downloads" / "whatever.wav").exists()
@@ -318,3 +319,18 @@ def test_untagged_file_described_with_spotify_metadata(tmp_path):
     tagged = make_wav(tmp_path / "dl" / "x.wav", title="Make Regal Great Again (Extended)", artist="ACIDBOY")
     e = log.import_file(importer.read_audio_track(tagged), sp, tmp_path / "music")
     assert (e.title, e.artists) == ("Make Regal Great Again (Extended)", ["ACIDBOY"])
+
+
+def test_target_name():
+    sp = Track("Spotify Title", ["Sp Artist"])
+    tagged = Track("Confusion", ["The Pump Panel"], mix="Dub", location="/d/x.MP3")
+    assert importer.target_name(tagged, sp, ".mp3") == "The Pump Panel - Confusion (Dub).mp3"
+    # No tags: the Spotify track it was matched to.
+    bare = Track("whatever", [], location="/d/whatever.wav")
+    assert importer.target_name(bare, sp, ".wav") == "Sp Artist - Spotify Title.wav"
+    # Several artists, forbidden characters.
+    t = Track("A/B: Song?", ["X", "Y"], location="/d/f.flac")
+    assert importer.target_name(t, sp, ".flac") == "X, Y - A B Song.flac"
+    # Already named that way: unchanged, even with another case or spacing.
+    ok = Track("5 Mins Of Acid", ["KI_KI"], location="/d/ki_ki  -  5 mins of acid.mp3")
+    assert importer.target_name(ok, sp, ".mp3") == "ki_ki  -  5 mins of acid.mp3"
