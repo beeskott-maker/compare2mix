@@ -45,15 +45,31 @@ def make_wav(path: Path, title=None, artist=None, isrc=None, seconds=1, age=60):
 # ---- reading -----------------------------------------------------------------
 
 def test_filename_parsing():
-    t = importer.track_from_filename(Path("Eric Prydz - Opus (Extended Mix).mp3"))
-    assert t.artists == ["Eric Prydz"] and t.title == "Opus (Extended Mix)"
+    # Bandcamp: "Artist - Album - 03 Title"
     t = importer.track_from_filename(Path("Barry Can't Swim - When Will We Land - 03 Kimbara.flac"))
     assert t.artists == ["Barry Can't Swim"] and t.title == "Kimbara"
-    t = importer.track_from_filename(Path("01 - Untitled.wav"))
-    assert t.title == "Untitled"
+    # Otherwise the whole name is kept; the matcher decides where the artist is.
+    t = importer.track_from_filename(Path("Eric Prydz - Opus (Extended Mix).mp3"))
+    assert t.artists == [] and t.title == "Eric Prydz - Opus (Extended Mix)"
+    assert importer.track_from_filename(Path("01 - Untitled.wav")).title == "Untitled"
     # Numbers that belong to the title are kept.
-    assert importer.track_from_filename(Path("KI-KI - 5 Mins Of Acid.mp3")).title == "5 Mins Of Acid"
+    assert importer.track_from_filename(Path("KI-KI - 5 Mins Of Acid.mp3")).title == "KI-KI - 5 Mins Of Acid"
     assert importer.track_from_filename(Path("2B Or Not 2B.mp3")).title == "2B Or Not 2B"
+
+
+@pytest.mark.parametrize("filename, title, artists", [
+    # "Title - Mix - Artist" (files reported by the user)
+    ("Confusion - Dub - Extended Edit - The Pump Panel.mp3", "Confusion - Dub - Extended Edit",
+     ["The Pump Panel", "Dan Zamani", "Tim Taylor (Missile Records)"]),
+    ("Make Regal Great Again - ACIDBOY.mp3", "Make Regal Great Again", ["ACIDBOY", "Regal"]),
+    # "Artist - Title (Mix)"
+    ("Eric Prydz - Opus (Extended Mix).mp3", "Opus", ["Eric Prydz"]),
+    ("Barry Can't Swim - When Will We Land - 03 Kimbara.flac", "Kimbara", ["Barry Can't Swim"]),
+])
+def test_untagged_file_names_are_recognised(filename, title, artists):
+    f = importer.track_from_filename(Path("/dl") / filename)
+    props = importer.propose([f], [Track(title, artists, source_id="spotify:track:x")])
+    assert len(props) == 1 and props[0].status == Status.FOUND, props and props[0].result
 
 
 def test_tags_win_over_filename(tmp_path):

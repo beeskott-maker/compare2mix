@@ -170,21 +170,20 @@ _BANDCAMP_NUMBER_RE = re.compile(r"^\s*\d{2}\s+(?=\S)")
 
 
 def track_from_filename(path: Path) -> Track:
-    """Guess artist/title from a name like "Artist - Title (Extended Mix).mp3".
+    """Track from a file name, when the file has no usable tags.
 
-    Bandcamp names files "Artist - Album - 01 Title.mp3"; leading track
-    numbers are removed.
+    Stores name their files differently: "Artist - Title (Extended Mix)",
+    "Title - Mix - Artist", Bandcamp's "Artist - Album - 03 Title"… Except for
+    the unambiguous Bandcamp case, the whole name is kept as the title with no
+    artist: the matcher then tries the artist at the start *and* at the end of
+    the name (see matcher._library_variants) and keeps the best reading.
     """
     stem = _TRACK_NUMBER_RE.sub("", path.stem).replace("_", " ").strip()
     parts = [p.strip() for p in stem.split(" - ") if p.strip()]
-    if len(parts) >= 3:  # Bandcamp: artist - album - nn title
-        artist = parts[0]
-        title = _BANDCAMP_NUMBER_RE.sub("", _TRACK_NUMBER_RE.sub("", parts[-1]))
-    elif len(parts) == 2:
-        artist, title = parts
-    else:
-        artist, title = "", stem
-    return Track(title=title, artists=split_artists(artist), location=str(path))
+    if len(parts) >= 3 and _BANDCAMP_NUMBER_RE.match(parts[-1]):
+        title = _BANDCAMP_NUMBER_RE.sub("", parts[-1])
+        return Track(title=title, artists=split_artists(parts[0]), location=str(path))
+    return Track(title=" - ".join(parts) or stem, artists=[], location=str(path))
 
 
 # Tag names per format: ID3 (MP3, WAV, AIFF), Vorbis comments (FLAC), MP4 (M4A).

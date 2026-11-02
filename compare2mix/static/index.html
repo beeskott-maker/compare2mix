@@ -738,9 +738,13 @@ function renderDownloads(d) {
   if (signature === dl.lastRender) return;
   dl.lastRender = signature;
 
-  $("dlState").textContent = `${d.watching} · ` + (d.missing
-    ? plural(d.missing, "morceau manquant recherché", "morceaux manquants recherchés")
-    : "aucun morceau manquant à rechercher") + " · vérifié toutes les 8 secondes";
+  const action = d.settings.keep_original ? "copiés" : "déplacés";
+  $("dlState").replaceChildren(
+    el("div", {}, "Surveillé : ", el("code", {}, d.watching), " · " + (d.missing
+      ? plural(d.missing, "morceau manquant recherché", "morceaux manquants recherchés")
+      : "aucun morceau manquant à rechercher") + " · vérifié toutes les 8 secondes"),
+    el("div", {}, `Les morceaux reconnus sont ${action} vers : `, el("code", {}, d.settings.music_dir),
+      d.settings.keep_original ? el("span", { class: "muted" }, " (l'original reste dans le dossier surveillé)") : null));
   const warn = $("dlWarning");
   warn.classList.toggle("hidden", d.can_import);
   if (!d.can_import) {
@@ -782,7 +786,9 @@ function renderDownloads(d) {
     ? el("div", {},
         el("div", {}, el("span", { class: "big-count" }, pending.length), " ",
           `${pending.length > 1 ? "nouveaux morceaux prêts" : "nouveau morceau prêt"} pour la playlist « ${d.settings.import_playlist} »`),
-        el("ul", { class: "notes" }, pending.map((p) => el("li", {}, p.spotify))))
+        el("p", {}, `${d.settings.keep_original ? "Copiés" : "Déplacés"} dans `, el("code", {}, d.settings.music_dir), " :"),
+        el("ul", { class: "notes" }, pending.map((p) => el("li", { title: p.file },
+          p.spotify, el("span", { class: "muted" }, "  → " + p.name)))))
     : el("p", {}, "Aucun nouveau morceau pour l'instant. Ils apparaîtront ici dès qu'ils seront copiés vers ta clé."));
   $("xmlDownload").disabled = !pending.length;
   $("xmlDownload").textContent = pending.length
