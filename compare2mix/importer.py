@@ -405,7 +405,20 @@ class ImportLog:
             self._save()
 
     def is_known(self, source: str) -> bool:
-        return source in self.ignored or any(i.source == source for i in self.imported)
+        """True when this very file in Downloads was already put in the music
+        folder. A file re-downloaded under the same name (newer than the
+        import), or whose copy is no longer there, is proposed again. The old
+        "ignored" list is no longer used: the wizard has no ignore button."""
+        try:
+            mtime = os.path.getmtime(source)
+        except OSError:
+            return False
+        for i in self.imported:
+            if i.source != source or mtime > i.imported_at + 1:
+                continue
+            if not is_available(i.file) or os.path.exists(i.file):
+                return True
+        return False
 
     def import_file(self, file: Track, spotify: Track, dest_dir: str | os.PathLike,
                     move: bool = True) -> ImportedTrack:

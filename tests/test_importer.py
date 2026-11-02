@@ -112,7 +112,6 @@ def test_import_moves_file_and_logs(tmp_path):
     entry = log.import_file(importer.read_audio_track(src), Track("Song", ["Nobody"],
                             source_id="spotify:track:1"), tmp_path / "music")
     assert not src.exists() and Path(entry.file).exists()
-    assert log.is_known(str(src))
     # name clash -> numbered copy, nothing overwritten
     src2 = make_wav(tmp_path / "dl" / "Nobody - Song.wav")
     entry2 = log.import_file(importer.read_audio_track(src2), Track("Song", ["Nobody"]),
@@ -371,3 +370,19 @@ def test_duration_difference_downgrades_to_check():
     assert importer.propose([same], [sp])[0].status == Status.FOUND
     p = importer.propose([longer], [sp])[0]
     assert p.status == Status.PROBABLE and p.result.score < 90
+
+
+def test_is_known_only_while_the_import_is_real(tmp_path):
+    log = importer.ImportLog(tmp_path / "imports.json")
+    sp = Track("Song", ["Nobody"], source_id="spotify:track:1")
+    src = make_wav(tmp_path / "dl" / "Nobody - Song.wav")
+    entry = log.import_file(importer.read_audio_track(src), sp, tmp_path / "music", move=False)
+    assert log.is_known(str(src))  # copied: the original stays, not proposed again
+    Path(entry.file).unlink()
+    assert not log.is_known(str(src))  # the copy is gone: proposed again
+    entry = log.import_file(importer.read_audio_track(src), sp, tmp_path / "music", move=False)
+    future = time.time() + 120
+    os.utime(src, (future, future))
+    assert not log.is_known(str(src))  # downloaded again since: a new file
+    log.ignore(str(tmp_path / "x.wav"))
+    assert not log.is_known(str(tmp_path / "x.wav"))  # old "ignored" list unused
