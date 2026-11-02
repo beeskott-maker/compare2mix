@@ -159,8 +159,10 @@ class App:
         self.write_import_xml()
 
     def library_status(self) -> dict:
+        path = self.library_path or self.settings.get("library_path")
         return {
-            "path": self.library_path,
+            "path": path,
+            "available": bool(path) and importer.is_available(path),
             "count": len(self.collection),
             "pending_import": len(self._pending_imports()),
             "isrc": self.isrc_count,
@@ -169,9 +171,17 @@ class App:
         }
 
     def autoload(self) -> None:
-        """Reload the last library (or data/rekordbox.xml) at startup."""
+        """Reload the last library (or data/rekordbox.xml) at startup.
+
+        When the last library lives on a USB key that is not plugged in, wait
+        for the key (see _retry_library) instead of falling back to another
+        file, which would also replace the remembered path.
+        """
         s = self.settings
         path = s.get("library_path")
+        if path and not importer.is_available(path):
+            print(f"Bibliothèque sur une clé non branchée ({path}) : chargée dès que tu la brancheras.")
+            return
         if not path or not os.path.isfile(path):
             path = str(DEFAULT_LIBRARY) if DEFAULT_LIBRARY.is_file() else None
         if path:
@@ -304,25 +314,42 @@ class App:
     def import_settings(self) -> dict:
         s = self.settings
         music_dir = s.get("music_dir") or str(importer.DEFAULT_MUSIC_DIR)
+        import_xml = s.get("import_xml") or str(importer.DEFAULT_MUSIC_DIR / "rekordbox-import.xml")
         return {
             "downloads_dir": s.get("downloads_dir") or str(importer.DEFAULT_DOWNLOADS),
             "music_dir": music_dir,
+            "music_dir_available": importer.is_available(music_dir),
+            "music_volume": importer.volume_root(music_dir),
+            "keep_original": bool(s.get("keep_original", False)),
             "import_playlist": s.get("import_playlist") or "compare2mix",
             "auto_import": s.get("auto_import", True),
-            "import_xml": str(Path(music_dir).expanduser() / "rekordbox-import.xml"),
+            "import_xml": import_xml,
             "rekordbox_playlists": sorted(self.rb_playlists, key=str.lower),
+            "suggested_music_dirs": self._suggested_music_dirs(),
         }
+
+    def _suggested_music_dirs(self) -> list[str]:
+        """Where the collection already lives (e.g. the USB key), then mounted keys."""
+        out = []
+        guess = importer.guess_music_dir([t.location for t in self.collection if t.location])
+        if guess:
+            out.append(guess)
+        for v in importer.list_volumes():
+            if v not in out:
+                out.append(v)
+        return out
 
     def set_import_settings(self, body: dict) -> dict:
         values = {}
-        for key in ("downloads_dir", "music_dir", "import_playlist"):
+        for key in ("downloads_dir", "music_dir", "import_playlist", "import_xml"):
             if body.get(key) is not None:
                 v = str(body[key]).strip()
                 if not v:
                     raise ApiError("Valeur vide.")
                 values[key] = os.path.expanduser(v) if key != "import_playlist" else v
-        if "auto_import" in body:
-            values["auto_import"] = bool(body["auto_import"])
+        for key in ("auto_import", "keep_original"):
+            if key in body:
+                values[key] = bool(body[key])
         config.update(self.config_path, **values)
         self.write_import_xml()
         return self.import_settings()
@@ -332,6 +359,8 @@ class App:
         tracks + imported files not yet in the collection."""
         pending = self._pending_imports()
         settings = self.import_settings()
+        if not importer.is_available(settings["import_xml"]):
+            return None  # XML kept on an unplugged key: rewritten when it comes back
         if not pending and not Path(settings["import_xml"]).exists():
             return None
         name = settings["import_playlist"]
@@ -363,13 +392,29 @@ class App:
         return self._file_cache[key]
 
     def _import(self, file: Track, sp: Track) -> importer.ImportedTrack:
-        entry = self.imports.import_file(file, sp, self.import_settings()["music_dir"])
+        settings = self.import_settings()
+        try:
+            entry = self.imports.import_file(file, sp, settings["music_dir"],
+                                             move=not settings["keep_original"])
+        except importer.VolumeUnavailable as e:
+            raise ApiError(f"{e} Branche-la puis réessaie.", 409, "volume") from e
         self.decisions.confirm(sp.key, Track(entry.title, entry.artists, location=entry.file).key)
         self._rebuild_library()
         return entry
 
+    def _retry_library(self) -> None:
+        """The library XML may live on the USB key: load it once the key is back."""
+        path = self.settings.get("library_path")
+        if not self.collection and path and os.path.isfile(path):
+            try:
+                self.load_library(path, bool(self.settings.get("read_tags")))
+            except Exception:  # pragma: no cover - shown as "not loaded" in the UI
+                pass
+
     def scan_downloads(self) -> dict:
+        self._retry_library()
         settings = self.import_settings()
+        can_import = settings["music_dir_available"]
         imported_now, to_confirm, unmatched = [], [], []
         with self.scan_lock:
             paths = [p for p in importer.scan_folder(settings["downloads_dir"])
@@ -380,7 +425,7 @@ class App:
             matched = set()
             for prop in proposals:
                 matched.add(prop.file.location)
-                if prop.status == Status.FOUND and settings["auto_import"]:
+                if prop.status == Status.FOUND and settings["auto_import"] and can_import:
                     entry = self._import(prop.file, prop.spotify)
                     imported_now.append(entry.spotify_display)
                 else:
@@ -401,6 +446,7 @@ class App:
         return {
             "watching": settings["downloads_dir"],
             "missing": len(missing),
+            "can_import": can_import,
             "imported_now": imported_now,
             "to_confirm": to_confirm,
             "unmatched": unmatched[:30],

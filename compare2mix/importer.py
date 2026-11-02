@@ -36,6 +36,60 @@ DEFAULT_DOWNLOADS = Path.home() / "Downloads"
 DEFAULT_MUSIC_DIR = Path.home() / "Music" / "compare2mix"
 LOG_FILE = Path.home() / ".compare2mix" / "imports.json"
 
+# External drives (USB keys) are mounted under /Volumes on macOS.
+VOLUMES_DIR = "/Volumes"
+_is_mount = os.path.ismount  # replaced in tests
+
+
+class VolumeUnavailable(OSError):
+    """The USB key / external drive holding a folder is not plugged in."""
+
+
+def volume_root(path: str | os.PathLike) -> str | None:
+    """'/Volumes/MA CLE/Musique/a.mp3' -> '/Volumes/MA CLE' (None if not external)."""
+    p = os.path.abspath(os.path.expanduser(str(path)))
+    prefix = VOLUMES_DIR.rstrip("/") + "/"
+    if not p.startswith(prefix):
+        return None
+    name = p[len(prefix):].split("/", 1)[0]
+    return prefix + name if name else None
+
+
+def is_available(path: str | os.PathLike) -> bool:
+    """False when ``path`` lives on an external drive that is not mounted.
+
+    Writing there anyway would create a fake folder on the internal disk and
+    the real key would then be mounted as "NAME 1".
+    """
+    root = volume_root(path)
+    return root is None or _is_mount(root)
+
+
+def list_volumes() -> list[str]:
+    """Mounted external drives (USB keys…), e.g. ['/Volumes/DJ KEY']."""
+    try:
+        names = sorted(os.listdir(VOLUMES_DIR))
+    except OSError:
+        return []
+    out = []
+    for n in names:
+        p = os.path.join(VOLUMES_DIR, n)
+        # Skip the startup disk, which macOS also lists here (as a symlink to /).
+        if n.startswith(".") or os.path.islink(p) or not _is_mount(p):
+            continue
+        out.append(p)
+    return out
+
+
+def guess_music_dir(locations: list[str]) -> str | None:
+    """Folder holding most of the collection (where new tracks probably belong)."""
+    counts: dict[str, int] = {}
+    for loc in locations:
+        if loc:
+            d = os.path.dirname(loc)
+            counts[d] = counts.get(d, 0) + 1
+    return max(counts, key=counts.get) if counts else None
+
 
 # --------------------------------------------------------------------------
 # Reading files
@@ -274,6 +328,10 @@ class ImportLog:
         if not src.is_file():
             raise FileNotFoundError(f"Fichier introuvable : {src}")
         dest_dir = Path(dest_dir).expanduser()
+        if not is_available(dest_dir):
+            raise VolumeUnavailable(
+                f"La clé « {os.path.basename(volume_root(dest_dir) or '')} » n'est pas branchée."
+            )
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = _unique_destination(dest_dir, src.name)
         if move:
@@ -291,6 +349,10 @@ class ImportLog:
         return entry
 
     def pending(self, collection_locations: set[str]) -> list[ImportedTrack]:
-        """Imported files not yet present in the Rekordbox collection."""
+        """Imported files not yet present in the Rekordbox collection.
+
+        Files on an unplugged USB key are kept (we cannot check them).
+        """
         return [i for i in self.imported
-                if i.file not in collection_locations and Path(i.file).exists()]
+                if i.file not in collection_locations
+                and (not is_available(i.file) or Path(i.file).exists())]

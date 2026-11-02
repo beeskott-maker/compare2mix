@@ -96,6 +96,19 @@ compare2mix n'écrit jamais dans la base de Rekordbox (`master.db`) : l'import X
 officielle et sans risque pour ta collection. Les dossiers, la playlist cible et l'import
 automatique se règlent dans ⚙ Réglages.
 
+### Musique et bibliothèque sur une clé USB
+
+Indique dans ⚙ Réglages le dossier de la clé où ranger les morceaux
+(ex. `/Volumes/MA CLE/Musique` ; le dossier qui contient déjà l'essentiel de ta collection
+est proposé). Charge l'export XML Rekordbox depuis la clé (ex. `/Volumes/MA CLE/rekordbox.xml`).
+
+- Clé débranchée : rien n'est écrit (pas de faux dossier sur le disque du Mac), les fichiers
+  restent dans Téléchargements et sont rangés automatiquement dès que la clé est branchée.
+  La bibliothèque sur la clé est rechargée à ce moment-là.
+- Option « garder aussi une copie dans le dossier surveillé » pour copier au lieu de déplacer.
+- Le fichier d'import pour Rekordbox reste par défaut sur le Mac
+  (`~/Music/compare2mix/rekordbox-import.xml`), pour que le réglage de Rekordbox ne change pas.
+
 ## Options utiles
 
 | Option | Effet |

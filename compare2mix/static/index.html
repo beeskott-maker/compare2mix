@@ -179,7 +179,12 @@
         <label for="setDownloads">Dossier surveillé</label>
         <input type="text" id="setDownloads" spellcheck="false">
         <label for="setMusic">Ranger les morceaux dans</label>
-        <input type="text" id="setMusic" spellcheck="false">
+        <input type="text" id="setMusic" list="musicDirs" spellcheck="false"
+               placeholder="/Volumes/NOM_DE_TA_CLE/Musique">
+        <span></span>
+        <label class="check"><input type="checkbox" id="setKeep"> garder aussi une copie dans le dossier surveillé</label>
+        <label for="setXml">Fichier d'import pour Rekordbox</label>
+        <input type="text" id="setXml" spellcheck="false">
         <label for="setPlaylist">Playlist Rekordbox</label>
         <input type="text" id="setPlaylist" list="rbPlaylists" spellcheck="false">
         <span></span>
@@ -188,8 +193,11 @@
         <div><button id="setSave">Enregistrer</button></div>
       </div>
       <datalist id="rbPlaylists"></datalist>
+      <datalist id="musicDirs"></datalist>
+      <p class="muted" id="musicHint"></p>
     </div>
 
+    <div id="dlWarning" class="dl-item hidden" style="background: var(--probable-bg); color: var(--probable)"></div>
     <div id="dlConfirm"></div>
     <div id="dlPending" class="pending-box hidden"></div>
     <details id="dlUnmatchedBox" class="hidden">
@@ -292,7 +300,8 @@ async function refreshStatus() {
   const s = await api("/api/status");
   state.status = s;
   const lib = s.library;
-  setPill("libPill", lib.count > 0, lib.count ? `Rekordbox : ${lib.count} morceaux` : "Rekordbox : non chargé");
+  setPill("libPill", lib.count > 0, lib.count ? `Rekordbox : ${lib.count} morceaux`
+    : lib.path && !lib.available ? "Rekordbox : clé USB non branchée" : "Rekordbox : non chargé");
   if (!$("libPath").value) $("libPath").value = lib.path || s.default_library || "";
   $("readTags").checked = !!lib.read_tags;
   $("libPanel").classList.toggle("hidden", lib.count > 0 && !state.showLib);
@@ -543,6 +552,12 @@ function fillSettings(st) {
   dl.settings = st;
   $("setDownloads").value = st.downloads_dir;
   $("setMusic").value = st.music_dir;
+  $("setKeep").checked = !!st.keep_original;
+  $("setXml").value = st.import_xml;
+  $("musicDirs").replaceChildren(...st.suggested_music_dirs.map((d) => el("option", { value: d })));
+  $("musicHint").textContent = st.suggested_music_dirs.length
+    ? `Suggestion : ${st.suggested_music_dirs[0]} (là où se trouve déjà l'essentiel de ta collection Rekordbox).`
+    : "";
   $("setPlaylist").value = st.import_playlist;
   $("setAuto").checked = !!st.auto_import;
   $("rbPlaylists").replaceChildren(...st.rekordbox_playlists.map((n) => el("option", { value: n })));
@@ -551,6 +566,7 @@ $("dlSettingsBtn").addEventListener("click", () => $("dlSettings").classList.tog
 $("setSave").addEventListener("click", (e) => busy(e.currentTarget, async () => {
   fillSettings(await api("/api/import-settings", {
     downloads_dir: $("setDownloads").value, music_dir: $("setMusic").value,
+    keep_original: $("setKeep").checked, import_xml: $("setXml").value,
     import_playlist: $("setPlaylist").value, auto_import: $("setAuto").checked,
   }));
   $("dlSettings").classList.add("hidden");
@@ -564,7 +580,7 @@ async function scanDownloads(manual = false) {
   dl.scanning = true;
   try {
     const d = await api("/api/downloads");
-    if (!dl.settings) fillSettings(d.settings);
+    if (!dl.settings || $("dlSettings").classList.contains("hidden")) fillSettings(d.settings);
     renderDownloads(d);
     if (d.imported_now.length) {
       toast(d.imported_now.length === 1 ? `Importé : ${d.imported_now[0]}`
@@ -581,12 +597,20 @@ async function scanDownloads(manual = false) {
 function renderDownloads(d) {
   // The scan runs every 8 s: only redraw when something changed, so that open
   // sections, hovered buttons and scroll position are left alone.
-  const signature = JSON.stringify([d.watching, d.missing, d.to_confirm, d.pending, d.unmatched, d.settings]);
+  const signature = JSON.stringify([d.watching, d.missing, d.can_import, d.to_confirm, d.pending, d.unmatched, d.settings]);
   if (signature === dl.lastRender) return;
   dl.lastRender = signature;
   $("dlStatus").textContent = d.missing
     ? `Surveillance de ${d.watching} · ${d.missing} morceau${d.missing > 1 ? "x" : ""} manquant${d.missing > 1 ? "s" : ""} recherché${d.missing > 1 ? "s" : ""}`
     : `Surveillance de ${d.watching} · aucun manquant à rechercher`;
+
+  const warn = $("dlWarning");
+  warn.classList.toggle("hidden", d.can_import);
+  if (!d.can_import) {
+    const key = (d.settings.music_volume || "").split("/").pop();
+    warn.textContent = `⚠ La clé « ${key} » n'est pas branchée : les fichiers restent dans ${d.watching} `
+      + "et seront rangés automatiquement dès que tu la brancheras.";
+  }
 
   $("dlConfirm").replaceChildren(...d.to_confirm.map((c) => el("div", { class: "dl-item" },
     el("div", { class: "what" },
