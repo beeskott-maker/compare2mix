@@ -127,7 +127,8 @@
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  td.file .rename { color: var(--accent, #1e9e4a); margin-top: 4px; }
+  .note.alert { color: var(--ko); font-weight: 600; margin-top: 4px; font-family: var(--font-ui); }
+  td.eq { color: var(--muted); font-weight: 700; font-size: 18px; text-align: center; padding-left: 0; padding-right: 0; width: 1.5em; }
   td.file { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; min-width: 180px; }
   .status { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .status.found { background: var(--ok-bg); color: var(--ok); }
@@ -717,17 +718,18 @@ function renderRecap() {
       const cb = el("input", { type: "checkbox", id: "m" + i, "aria-label": "Inclure " + m.name });
       cb.checked = m.on;
       cb.addEventListener("change", () => { m.on = cb.checked; updateStart(); });
+      const dur = (d) => (m.durations ? el("div", { class: "note alert" }, "durée " + d) : null);
       return el("tr", {},
         el("td", {}, cb),
-        el("td", { class: "file" }, m.name,
-          m.new_name !== m.name ? el("div", { class: "rename" }, "→ " + m.new_name) : null),
-        el("td", {}, m.spotify),
+        el("td", {}, m.spotify, dur(m.durations && m.durations.spotify)),
+        el("td", { class: "eq", "aria-hidden": "true" }, "="),
+        el("td", { class: "file" }, m.new_name || m.name, dur(m.durations && m.durations.file)),
         el("td", {}, el("span", { class: "status " + m.status },
           m.status === "found" ? `✅ sûr · ${Math.round(m.score)}` : `🟡 à vérifier · ${Math.round(m.score)}`),
           m.notes.length ? el("div", { class: "note" }, m.notes.join(" · ")) : null));
     });
     parts.push(el("div", { class: "tablewrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Fichier → nouveau nom"), el("th", {}, "Morceau manquant"), el("th", {}, "Correspondance"))),
+      el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Morceau manquant"), el("th", {}), el("th", {}, "Fichier"), el("th", {}, "Correspondance"))),
       el("tbody", {}, rows))));
   } else {
     parts.push(el("p", { class: "lead" }, "Aucun fichier de Téléchargements ne correspond aux morceaux manquants pour l'instant. Télécharge-les, puis clique sur Revérifier."));

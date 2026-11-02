@@ -548,7 +548,9 @@ class App:
                 "spotify": p.spotify.display,
                 "status": p.status.name.lower(),  # found / probable
                 "score": p.result.score,
-                "notes": p.result.notes,
+                # The durations are shown under each name, only when they differ.
+                "notes": [n for n in p.result.notes if not n.startswith("durée")],
+                "durations": _durations_if_different(p.file.duration_s, p.spotify.duration_s),
             } for p in sorted(proposals, key=lambda p: -p.result.score)],
             "unmatched": unmatched[:30],
             "still_missing": [t.display for t in missing if t.key not in matched_tracks],
@@ -620,6 +622,19 @@ class App:
         write_csv_to(results, buf)
         safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in entry["name"]).strip()
         return buf.getvalue(), f"compare2mix - {safe or pid}.csv"
+
+
+def _mmss(seconds: float) -> str:
+    seconds = int(round(seconds))
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def _durations_if_different(file_s: float | None, spotify_s: float | None,
+                            tolerance_s: float = 30) -> dict | None:
+    """{"file": "9:46", "spotify": "4:26"} when both are known and differ."""
+    if not file_s or not spotify_s or abs(file_s - spotify_s) <= tolerance_s:
+        return None
+    return {"file": _mmss(file_s), "spotify": _mmss(spotify_s)}
 
 
 # --------------------------------------------------------------------------

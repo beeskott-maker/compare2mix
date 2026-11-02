@@ -187,6 +187,7 @@ def test_recap_then_transfer_then_xml(env):
     res = call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"]})
     moved = tmp / "Music" / "Nobody - Some Unknown Track.wav"
     assert m["new_name"] == moved.name
+    assert "durations" in m and not any(n.startswith("durée") for n in m["notes"])
     assert res == {"imported": "Nobody – Some Unknown Track", "file": str(moved),
                    "renamed": False}
     assert moved.exists() and not (tmp / "Downloads" / "whatever.wav").exists()
@@ -354,3 +355,9 @@ def test_export_renamed_after_transfer(env, tmp_path):
     # The renamed export is no longer picked up, the library stays loaded.
     assert importer.find_rekordbox_export(dl, min_age_s=0) is None
     assert call("/api/library/from-downloads", {})["just_loaded"] is None
+
+
+def test_durations_only_when_different():
+    assert web._durations_if_different(586, 266) == {"file": "9:46", "spotify": "4:26"}
+    assert web._durations_if_different(280, 266) is None  # within 30 s
+    assert web._durations_if_different(None, 266) is None
