@@ -73,3 +73,17 @@ def test_swap_is_noted(matcher):
 def test_normal_match_has_no_swap_note(matcher):
     r = matcher.match(Track("Moving on Up", ["M People"]))
     assert r.status == Status.FOUND and r.notes == []
+
+
+def test_self_titled_track():
+    """A track named after its artist ("Alloy Mental" by Alloy Mental)."""
+    lib = [Track("I Am", ["Alloy Mental"], source_id="iam"),
+           Track("Alloy Mental", ["Alloy Mental"], source_id="self")]
+    m = Matcher(lib)
+    r = m.match(Track("Alloy Mental", ["Alloy Mental"]))
+    assert r.status == Status.FOUND and r.match.source_id == "self"
+    assert r.notes == []
+    r = m.match(Track("I Am", ["Alloy Mental"]))
+    assert r.status == Status.FOUND and r.match.source_id == "iam"
+    # Without the self-titled track in the library, the other one is not a match.
+    assert Matcher(lib[:1]).match(Track("Alloy Mental", ["Alloy Mental"])).status == Status.MISSING
