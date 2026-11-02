@@ -195,3 +195,65 @@ def test_manual_confirmation_when_auto_import_off(env):
     r = call("/api/import", {"source": c["source"], "spotify_key": c["spotify_key"]})
     assert r["imported"] == "Nobody – Some Unknown Track"
     assert call("/api/downloads")["to_confirm"] == []
+
+
+# ---- Rekordbox export dropped in Downloads ------------------------------------
+
+def _drop_export(folder: Path, name="rekordbox.xml", age=60, product="rekordbox"):
+    folder.mkdir(parents=True, exist_ok=True)
+    data = (FIX / "rekordbox_sample.xml").read_text(encoding="utf-8")
+    data = data.replace('Name="rekordbox"', f'Name="{product}"')
+    p = folder / name
+    p.write_text(data, encoding="utf-8")
+    old = time.time() - age
+    os.utime(p, (old, old))
+    return p
+
+
+def test_find_rekordbox_export(tmp_path):
+    assert importer.find_rekordbox_export(tmp_path) is None
+    _drop_export(tmp_path, "compare2mix-import.xml", product="compare2mix")  # ours: ignored
+    (tmp_path / "other.xml").write_text("<rss></rss>")
+    assert importer.find_rekordbox_export(tmp_path) is None
+    older = _drop_export(tmp_path, "rekordbox.xml", age=600)
+    newer = _drop_export(tmp_path, "rekordbox (1).xml", age=60)
+    assert importer.find_rekordbox_export(tmp_path) == newer
+    _drop_export(tmp_path, "fresh.xml", age=0)  # still being written: ignored
+    assert importer.find_rekordbox_export(tmp_path) == newer
+    assert older.exists()
+
+
+def test_library_picked_up_from_downloads(tmp_path, monkeypatch):
+    from test_web import FakeSpotify
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"client_id": "abc", "downloads_dir": str(tmp_path / "Downloads"),
+                               "music_dir": str(tmp_path / "Music"),
+                               "import_xml": str(tmp_path / "import.xml")}))
+    app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
+                  spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
+    assert app.check_downloads_for_library() is None  # nothing there
+
+    export = _drop_export(tmp_path / "Downloads")
+    assert app.check_downloads_for_library() == "rekordbox.xml"
+    st = app.library_status()
+    assert st["count"] == 8 and st["name"] == "rekordbox.xml"
+    assert export.exists()  # left where it was
+    assert app.check_downloads_for_library() is None  # same file: not reloaded
+
+    # A newer export replaces it; scan_downloads reports it.
+    newer = _drop_export(tmp_path / "Downloads", "rekordbox (1).xml", age=10)
+    assert app.scan_downloads()["library_auto_loaded"] == "rekordbox (1).xml"
+
+
+def test_old_export_does_not_replace_newer_library(tmp_path):
+    from test_web import FakeSpotify
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"client_id": "abc", "downloads_dir": str(tmp_path / "Downloads")}))
+    app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
+                  spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
+    # Library uploaded from the page just now...
+    app.upload_library((FIX / "rekordbox_sample.xml").read_bytes(), "cle.xml")
+    # ...while an export from last week lingers in Downloads.
+    _drop_export(tmp_path / "Downloads", age=7 * 86400)
+    assert app.check_downloads_for_library() is None
+    assert app.library_status()["name"] == "cle.xml"

@@ -169,6 +169,7 @@
         <input type="file" id="libFile" accept=".xml,application/xml,text/xml" hidden>
         <div>📄 <b>Glisse ici ton fichier XML Rekordbox</b> ou clique pour le choisir</div>
         <div class="muted">Rekordbox → Fichier → Exporter la collection au format xml (par ex. sur ta clé USB)</div>
+        <div class="muted">Ou exporte-le simplement dans ton dossier Téléchargements : il sera chargé tout seul.</div>
       </label>
       <div class="row" style="margin-top:10px">
         <label class="check"><input type="checkbox" id="readTags"> lire aussi les ISRC dans les fichiers audio (clé branchée, plus lent)</label>
@@ -395,6 +396,7 @@ $("next1").addEventListener("click", () => goto(2));
 async function refreshStatus() {
   const s = await api("/api/status");
   state.status = s;
+  if (s.library_auto_loaded) libraryAutoLoaded(s.library_auto_loaded);
   const sp = s.spotify;
   const spState = $("spState");
   if (!sp.client_id) {
@@ -469,6 +471,16 @@ drop.addEventListener("drop", (e) => { e.preventDefault(); uploadLibrary(e.dataT
 // A file dropped next to the zone must not replace the page.
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
+
+function libraryAutoLoaded(name) {
+  toast(`Bibliothèque Rekordbox mise à jour depuis Téléchargements : ${name}`);
+  state.needsRefresh = true;
+  if (state.step === 2) compare(false);
+}
+// Step 1: pick up a Rekordbox export dropped in the Downloads folder.
+setInterval(() => {
+  if (document.visibilityState === "visible" && state.step === 1) refreshStatus().catch(() => {});
+}, 8000);
 
 // ---------- step 2: results --------------------------------------------------
 function defaultPlaylistId(mine) {
@@ -705,6 +717,7 @@ async function scanDownloads(manual = false) {
     // The missing tracks are those of the playlist compared at step 2.
     if (!state.data) await enterStep2();
     const d = await api("/api/downloads");
+    if (d.library_auto_loaded) { libraryAutoLoaded(d.library_auto_loaded); await refreshStatus(); }
     if (!dl.settings || $("dlSettings").classList.contains("hidden")) fillSettings(d.settings);
     renderDownloads(d);
     if (d.imported_now.length) {

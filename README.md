@@ -65,6 +65,9 @@ en 3 étapes. Quand tout est déjà prêt, elle s'ouvre directement à l'étape 
 1. **Connexion & bibliothèque** : test de la connexion Spotify (Client ID, connexion,
    déconnexion) et envoi du fichier XML Rekordbox (glisser-déposer ou sélection ; par ex. depuis la
    clé USB). Une copie est gardée : à refaire seulement après un nouvel export.
+   Plus simple encore : exporte le XML directement dans ton dossier **Téléchargements**, il est
+   repéré et chargé tout seul (seulement s'il est plus récent que la bibliothèque actuelle ; le
+   fichier n'est pas déplacé).
 2. **Résultats** : la playlist par défaut (« À mixer » ou celle marquée ★) est comparée
    automatiquement ; onglets ❌ / 🟡 / ✅, clic sur un titre = copie du lien Spotify, copie de la
    liste des manquants, export CSV, corrections d'un clic (mémorisées).

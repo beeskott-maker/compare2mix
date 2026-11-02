@@ -99,6 +99,7 @@ class App:
         self.imports = imports or importer.ImportLog()
         self.lock = threading.RLock()
         self.scan_lock = threading.Lock()
+        self.library_lock = threading.Lock()
         self.library_path: str | None = None
         # Tracks of the Rekordbox export, and its playlists (name -> tracks).
         self.collection: list[Track] = []
@@ -160,8 +161,36 @@ class App:
         tmp.write_bytes(data)
         tmp.replace(dest)
         self.load_library(str(dest), read_tags)
-        config.update(self.config_path, library_name=filename or "rekordbox.xml")
+        config.update(self.config_path, library_name=filename or "rekordbox.xml",
+                      library_source_mtime=time.time())
         return self.library_status()
+
+    def check_downloads_for_library(self) -> str | None:
+        """Load a Rekordbox export dropped in the Downloads folder.
+
+        Each file (path + date + size) is loaded once; only an export newer
+        than the current library is taken. Returns its name when loaded.
+        """
+        folder = self.settings.get("downloads_dir") or str(importer.DEFAULT_DOWNLOADS)
+        found = importer.find_rekordbox_export(folder)
+        if found is None:
+            return None
+        st = found.stat()
+        signature = f"{found}|{st.st_mtime}|{st.st_size}"
+        with self.library_lock:
+            s = self.settings
+            if s.get("library_source") == signature:
+                return None  # already loaded
+            if self.collection:
+                baseline = s.get("library_source_mtime")
+                if baseline is None and self.library_path and os.path.isfile(self.library_path):
+                    baseline = os.path.getmtime(self.library_path)
+                if st.st_mtime <= (baseline or 0):
+                    return None  # not newer than the library already loaded
+            self.upload_library(found.read_bytes(), found.name, bool(s.get("read_tags")))
+            config.update(self.config_path, library_source=signature,
+                          library_source_mtime=st.st_mtime)
+        return found.name
 
     def _collection_locations(self) -> set[str]:
         return {t.location for t in self.collection if t.location}
@@ -438,6 +467,7 @@ class App:
 
     def scan_downloads(self) -> dict:
         self._retry_library()
+        library_loaded = self.check_downloads_for_library()
         settings = self.import_settings()
         can_import = settings["music_dir_available"]
         imported_now, to_confirm, unmatched = [], [], []
@@ -471,6 +501,7 @@ class App:
         return {
             "watching": settings["downloads_dir"],
             "missing": len(missing),
+            "library_auto_loaded": library_loaded,
             "can_import": can_import,
             "imported_now": imported_now,
             "to_confirm": to_confirm,
@@ -593,6 +624,7 @@ def make_handler(app: App):
                 return self._run(lambda: self._redirect(app.start_login()))
             if path == "/api/status":
                 return self._run(lambda: self._json({
+                    "library_auto_loaded": app.check_downloads_for_library(),
                     "library": app.library_status(),
                     "spotify": app.spotify_status(),
                     "default_library": app.settings.get("library_path") or str(DEFAULT_LIBRARY),

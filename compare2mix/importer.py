@@ -130,6 +130,39 @@ def scan_folder(folder: str | os.PathLike, min_age_s: float = MIN_AGE_S) -> list
 
 
 # "01 - Title", "01. Title", "01_Title" (explicit separator)...
+def is_rekordbox_export(path: str | os.PathLike) -> bool:
+    """True for a collection exported by Rekordbox (not our own import file)."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(65536).decode("utf-8", "ignore")
+    except OSError:
+        return False
+    if "<DJ_PLAYLISTS" not in head:
+        return False
+    m = re.search(r'<PRODUCT\b[^>]*\bName="([^"]*)"', head)
+    return bool(m) and m.group(1).strip().lower() == "rekordbox"
+
+
+def find_rekordbox_export(folder: str | os.PathLike,
+                          min_age_s: float = MIN_AGE_S) -> Path | None:
+    """Most recent finished Rekordbox XML export directly in ``folder``."""
+    folder = Path(folder).expanduser()
+    if not folder.is_dir():
+        return None
+    now = time.time()
+    candidates = []
+    for p in folder.iterdir():
+        if p.suffix.lower() != ".xml" or p.name.startswith(".") or not p.is_file():
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if st.st_size and now - st.st_mtime >= min_age_s and is_rekordbox_export(p):
+            candidates.append((st.st_mtime, p))
+    return max(candidates)[1] if candidates else None
+
+
 _TRACK_NUMBER_RE = re.compile(r"^\s*\d{1,3}\s*[-._)]\s*(?=\S)")
 # ...and Bandcamp's "03 Title" (two digits + space), only used on the last
 # part of "Artist - Album - 03 Title" so that "5 Mins Of Acid" stays intact.
