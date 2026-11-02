@@ -12,6 +12,7 @@ Two sources are supported:
 from __future__ import annotations
 
 import os
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
@@ -99,7 +100,10 @@ def load_xml_playlists(path: str | os.PathLike) -> dict[str, list[Track]]:
 
 def _path_to_location(path: str) -> str:
     """'/Users/me/a b.mp3' -> 'file://localhost/Users/me/a%20b.mp3' (Rekordbox style)."""
-    return "file://localhost" + quote(os.path.abspath(path), safe="/:")
+    # Encoded like Rekordbox's own exports: "(" ")" kept, lowercase hex
+    # ("BR%c3%98MANCE", "Don%27t").
+    encoded = quote(os.path.abspath(path), safe="/:()")
+    return "file://localhost" + re.sub(r"%[0-9A-F]{2}", lambda m: m.group(0).lower(), encoded)
 
 
 def write_import_xml(path: str | os.PathLike, playlist_name: str,
@@ -138,7 +142,11 @@ def write_import_xml(path: str | os.PathLike, playlist_name: str,
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    ET.ElementTree(root).write(tmp, encoding="UTF-8", xml_declaration=True)
+    # Same header as Rekordbox's own exports (double quotes): Rekordbox's XML
+    # reader is stricter than the standard and rejected ElementTree's
+    # single-quoted declaration.
+    tmp.write_text('<?xml version="1.0" encoding="UTF-8"?>\n\n'
+                   + ET.tostring(root, encoding="unicode") + "\n", encoding="utf-8")
     tmp.replace(path)
 
 

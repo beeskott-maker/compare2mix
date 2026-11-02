@@ -386,3 +386,15 @@ def test_is_known_only_while_the_import_is_real(tmp_path):
     assert not log.is_known(str(src))  # downloaded again since: a new file
     log.ignore(str(tmp_path / "x.wav"))
     assert not log.is_known(str(tmp_path / "x.wav"))  # old "ignored" list unused
+
+
+def test_import_xml_looks_like_a_rekordbox_export(tmp_path):
+    out = tmp_path / "i.xml"
+    path = "/Volumes/BSK/_Musique/Sidekick - Deep Fear (Lumberjack & BRØMANCE Remix Edit).wav"
+    rekordbox.write_import_xml(out, "À mixer", [Track("Deep Fear", ["Sidekick"], location=path)])
+    text = out.read_text(encoding="utf-8")
+    assert text.startswith('<?xml version="1.0" encoding="UTF-8"?>')
+    # Exactly how Rekordbox 7 writes this path in its own export.
+    assert ('Location="file://localhost/Volumes/BSK/_Musique/Sidekick%20-%20Deep%20Fear%20'
+            '(Lumberjack%20%26%20BR%c3%98MANCE%20Remix%20Edit).wav"') in text
+    assert rekordbox.load_xml(out)[0].location == path
