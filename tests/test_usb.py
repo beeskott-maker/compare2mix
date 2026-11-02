@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from compare2mix import importer, rekordbox, web
+from compare2mix import importer, web
 from compare2mix.decisions import DecisionStore
 from compare2mix.models import Track
 from test_importer import make_wav
@@ -96,8 +96,8 @@ def server(volumes, tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({
         "client_id": "abc", "downloads_dir": str(tmp_path / "Downloads"),
-        "music_dir": str(key / "Musique"), "import_xml": str(tmp_path / "import.xml"),
-        "import_playlist": "Warm up", "keep_original": False,
+        "music_dir": str(key / "Musique"),
+        "keep_original": False,
     }))
     app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
                   spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
@@ -138,9 +138,6 @@ def test_key_unplugged_then_plugged(server, volumes):
     assert call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")["destination"]["available"] is True
     call("/api/import", {"source": str(src), "spotify_key": "spotify:track:9"})
     assert (key / "Musique" / src.name).exists() and not src.exists()
-    x = call("/api/import-xml", {})
-    pl = rekordbox.load_xml_playlists(x["path"])["Warm up"]
-    assert pl[-1].location == str(key / "Musique" / src.name)
 
 
 def test_keep_original_copies(server):

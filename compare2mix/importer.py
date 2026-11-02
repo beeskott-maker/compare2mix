@@ -1,14 +1,13 @@
-"""Watching the Downloads folder for purchased tracks and preparing their
-import into Rekordbox.
+"""Finding purchased tracks in the Downloads folder and filing them on the
+music folder (USB key), ready to be dragged into Rekordbox.
 
 Flow:
   1. ``scan_folder`` lists finished audio files in the Downloads folder
      (top level and one sub-folder deep, e.g. an unzipped Bandcamp album).
   2. ``read_audio_track`` turns each file into a Track (tags, else file name).
   3. ``propose`` matches the files against the missing Spotify tracks.
-  4. ``ImportLog.import_file`` moves a file into the music folder and
-     remembers it; ``write_import_xml`` (rekordbox.py) then produces the XML
-     that Rekordbox imports as a playlist.
+  4. ``ImportLog.import_file`` renames it "ARTIST - TITLE", moves it into the
+     music folder and remembers it.
 """
 
 from __future__ import annotations

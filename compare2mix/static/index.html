@@ -188,7 +188,7 @@
     <li><button data-go="2"><div class="bar"></div><div class="lbl"><span class="n">2</span><span class="name">Exporter</span></div></button></li>
     <li><button data-go="3"><div class="bar"></div><div class="lbl"><span class="n">3</span><span class="name">Manquants</span></div></button></li>
     <li><button data-go="4"><div class="bar"></div><div class="lbl"><span class="n">4</span><span class="name">Récapitulatif</span></div></button></li>
-    <li><button data-go="5"><div class="bar"></div><div class="lbl"><span class="n">5</span><span class="name">Copie & XML</span></div></button></li>
+    <li><button data-go="5"><div class="bar"></div><div class="lbl"><span class="n">5</span><span class="name">Copie</span></div></button></li>
   </ol>
 
   <!-- STEP 1: Spotify playlist -->
@@ -284,7 +284,7 @@
     <div class="nav"><button class="btn" data-go="3">← Retour</button><button class="btn primary" id="startCopy" disabled>Lancer la copie →</button></div>
   </section>
 
-  <!-- STEP 5: transfer + XML -->
+  <!-- STEP 5: transfer -->
   <section class="step" data-step="5" hidden>
     <div class="panel stack">
       <div>
@@ -295,19 +295,7 @@
       <ul class="tasks" id="tasks"></ul>
       <div class="done-card" id="doneCard" hidden>
         <div id="doneText"></div>
-        <div class="row">
-          <button class="btn primary" id="dlXml">Télécharger le fichier XML</button>
-          <button class="btn" id="restart">Recommencer</button>
-        </div>
-        <details id="howto">
-          <summary>Comment l'importer dans Rekordbox</summary>
-          <ol class="howto">
-            <li>Une seule fois : Préférences → Affichage → Disposition → coche « rekordbox xml » ; puis Préférences → Avancé → Base de données → « Bibliothèque rekordbox xml » → choisis sa copie toujours à jour, qui ne change pas de place :
-              <code id="xmlPath"></code> <button class="btn small" id="xmlPathCopy">Copier le chemin</button></li>
-            <li>À chaque fois : barre latérale → rekordbox xml → Listes de lecture (actualise si besoin) → clic droit sur « <span id="howtoPlaylist"></span> » → Importer la liste de lecture.</li>
-            <li>La playlist contient ses morceaux actuels + les nouveaux : rien n'est perdu.</li>
-          </ol>
-        </details>
+        <div class="row"><button class="btn" id="restart">Recommencer</button></div>
       </div>
     </div>
     <div class="nav"><button class="btn" data-go="4" id="back5">← Retour</button><span></span></div>
@@ -325,12 +313,7 @@
       <input type="text" id="setMusic" list="musicDirs" spellcheck="false" placeholder="/Volumes/NOM_DE_TA_CLE/Musique">
       <span></span>
       <label class="check"><input type="checkbox" id="setKeep"> garder l'original dans Téléchargements (copier au lieu de déplacer)</label>
-      <label for="setPlaylist">Playlist Rekordbox</label>
-      <input type="text" id="setPlaylist" list="rbPlaylists" spellcheck="false" placeholder="même nom que la playlist Spotify">
-      <label for="setXml">Fichier d'import</label>
-      <input type="text" id="setXml" spellcheck="false">
     </div>
-    <datalist id="rbPlaylists"></datalist>
     <datalist id="musicDirs"></datalist>
     <p class="note" id="musicHint"></p>
     <div class="row"><button class="btn primary" id="setSave">Enregistrer</button><button class="btn" id="setCancel">Fermer</button></div>
@@ -755,7 +738,7 @@ function updateStart() {
   $("startCopy").disabled = !k || !r.destination.available;
 }
 
-// ---------- step 5: transfer with progress, then XML --------------------------------
+// ---------- step 5: transfer with progress ----------------------------------------
 $("startCopy").addEventListener("click", runTransfer);
 async function runTransfer() {
   if (!state.recap || !state.recap.matches) return;
@@ -766,7 +749,7 @@ async function runTransfer() {
   $("doneCard").hidden = true;
   $("copyTitle").textContent = "Copie en cours…";
   $("copyLead").textContent = "Ne débranche pas la clé.";
-  const steps = [...sel.map((m) => `Copie de ${m.new_name || m.name}`), "Génération du fichier XML"];
+  const steps = sel.map((m) => `Copie de ${m.new_name || m.name}`);
   const lis = steps.map((s) => el("li", {}, el("span", { class: "ic" }, "○"), el("span", { class: "t" }, s)));
   $("tasks").replaceChildren(...lis);
   const setPct = (i) => {
@@ -792,27 +775,17 @@ async function runTransfer() {
     }
     setPct(i + 1);
   }
-  const last = lis[lis.length - 1];
-  mark(last, "run", "◐");
-  try {
-    const x = await api("/api/import-xml", {});
-    mark(last, "ok", "✓");
-    setPct(steps.length);
-    const dest = state.recap.destination.music_dir;
-    $("copyTitle").textContent = "Terminé";
-    $("copyLead").textContent = `${plural(ok, "fichier rangé", "fichiers rangés")} dans ${dest}`
-      + (ok < sel.length ? ` · ${sel.length - ok} en erreur` : "") + ".";
-    $("doneText").replaceChildren(el("b", {}, "compare2mix-import.xml"),
-      ` est prêt : playlist « ${x.playlist} » avec ses ${x.existing} morceaux actuels + `, el("b", {}, x.new),
-      ` nouveau${x.new > 1 ? "x" : ""}.`,
-      ...(x.export_archived ? [el("div", { class: "note" }, `Ton export Rekordbox a été renommé « ${x.export_archived} » dans Téléchargements : il ne sera plus relu.`)] : []));
-    $("xmlPath").textContent = x.path;
-    $("howtoPlaylist").textContent = x.playlist;
+  const dest = state.recap.destination.music_dir;
+  $("copyTitle").textContent = ok ? "Terminé" : "Rien n'a été copié";
+  $("copyLead").textContent = `${plural(ok, "fichier rangé", "fichiers rangés")} dans ${dest}`
+    + (ok < sel.length ? ` · ${sel.length - ok} en erreur` : "") + ".";
+  if (ok) {
+    let archived = null;
+    try { archived = (await api("/api/transfer-done", {})).export_archived; } catch (e) { /* not essential */ }
+    $("doneText").replaceChildren(
+      el("div", {}, "Dans Rekordbox, glisse-les depuis le Finder (", el("code", {}, dest), ") sur ta playlist."),
+      ...(archived ? [el("div", { class: "note" }, `Ton export Rekordbox a été renommé « ${archived} » dans Téléchargements : il ne sera plus relu.`)] : []));
     $("doneCard").hidden = false;
-  } catch (e) {
-    mark(last, "err", "✗", e.message);
-    $("copyTitle").textContent = ok ? "Copie terminée, fichier XML non généré" : "Rien n'a été copié";
-    $("copyLead").textContent = e.message;
   }
   state.transfer.done = true;
   $("back5").disabled = false;
@@ -820,10 +793,6 @@ async function runTransfer() {
   state.recap = null;
   compare(false).then(() => updateStepper());
 }
-$("dlXml").addEventListener("click", () => { window.location = "/api/import.xml"; });
-$("xmlPathCopy").addEventListener("click", async () => {
-  try { await copyText($("xmlPath").textContent); toast("Chemin copié"); } catch (e) { toast(e.message, true); }
-});
 $("restart").addEventListener("click", () => { state.recap = null; state.transfer = null; go(1); });
 
 // ---------- settings ---------------------------------------------------------
@@ -832,9 +801,6 @@ async function openSettings() {
   $("setDownloads").value = st.downloads_dir;
   $("setMusic").value = st.music_dir;
   $("setKeep").checked = !!st.keep_original;
-  $("setPlaylist").value = st.import_playlist;
-  $("setXml").value = st.import_xml;
-  $("rbPlaylists").replaceChildren(...st.rekordbox_playlists.map((n) => el("option", { value: n })));
   $("musicDirs").replaceChildren(...st.suggested_music_dirs.map((d) => el("option", { value: d })));
   $("musicHint").textContent = st.suggested_music_dirs.length
     ? `Suggestion pour le rangement : ${st.suggested_music_dirs[0]} (là où se trouve déjà l'essentiel de ta collection).` : "";
@@ -848,7 +814,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("setting
 $("setSave").addEventListener("click", (e) => busy(e.currentTarget, async () => {
   await api("/api/import-settings", {
     downloads_dir: $("setDownloads").value, music_dir: $("setMusic").value,
-    keep_original: $("setKeep").checked, import_playlist: $("setPlaylist").value, import_xml: $("setXml").value,
+    keep_original: $("setKeep").checked,
   });
   $("settings").hidden = true;
   toast("Réglages enregistrés");

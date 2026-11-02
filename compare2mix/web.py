@@ -104,11 +104,9 @@ class App:
         self.library_path: str | None = None
         # Tracks of the Rekordbox export, and its playlists (name -> tracks).
         self.collection: list[Track] = []
-        self.rb_playlists: dict[str, list[Track]] = {}
         # What we match against: the collection + files imported since the export.
         self.library: list[Track] = []
         self._file_cache: dict[tuple[str, float, int], Track] = {}
-        self._last_playlist_name: str | None = None
         self.isrc_count = 0
         self.read_tags = False
         self.loaded_at: float | None = None
@@ -139,10 +137,9 @@ class App:
         if not os.path.isfile(path):
             raise ApiError(f"Fichier introuvable : {path}", 404)
         tracks = rekordbox.load_xml(path)
-        playlists = rekordbox.load_xml_playlists(path)
         isrc = rekordbox.enrich_isrc_from_tags(tracks) if read_tags else 0
         with self.lock:
-            self.library_path, self.collection, self.rb_playlists = path, tracks, playlists
+            self.library_path, self.collection = path, tracks
             self.isrc_count, self.read_tags, self.loaded_at = isrc, read_tags, time.time()
             self._rebuild_library()
         config.update(self.config_path, library_path=os.path.abspath(path), read_tags=read_tags)
@@ -242,11 +239,10 @@ class App:
         return self.imports.pending(self._collection_locations())
 
     def _rebuild_library(self) -> None:
-        """Collection + imported files not yet in the export, then the import XML."""
+        """Collection + imported files not yet in the export."""
         with self.lock:
             self.library = self.collection + [i.to_track() for i in self._pending_imports()]
             self.matcher = Matcher(self.library)
-        self.write_import_xml()
 
     def library_status(self) -> dict:
         path = self.library_path or self.settings.get("library_path")
@@ -364,7 +360,6 @@ class App:
             raise ApiError("Charge d'abord ta bibliothèque Rekordbox.", 400, "no_library")
         pid = spotify.parse_playlist_id(playlist_id)
         entry = self._playlist(pid, refresh)
-        self._last_playlist_name = entry["name"]
         results = [self._resolve(t) for t in entry["tracks"]]
         counts = {s.name.lower(): 0 for s in Status}
         for r in results:
@@ -409,20 +404,12 @@ class App:
     def import_settings(self) -> dict:
         s = self.settings
         music_dir = s.get("music_dir") or str(importer.DEFAULT_MUSIC_DIR)
-        import_xml = s.get("import_xml") or str(importer.DEFAULT_MUSIC_DIR / "rekordbox-import.xml")
         return {
             "downloads_dir": s.get("downloads_dir") or str(importer.DEFAULT_DOWNLOADS),
             "music_dir": music_dir,
             "music_dir_available": importer.is_available(music_dir),
             "music_volume": importer.volume_root(music_dir),
             "keep_original": bool(s.get("keep_original", False)),
-            # Empty = same name as the Spotify playlist being compared.
-            # "compare2mix" was the old default: treat it as "not chosen".
-            "import_playlist": ("" if s.get("import_playlist") == "compare2mix"
-                                else s.get("import_playlist") or ""),
-            "auto_import": s.get("auto_import", True),
-            "import_xml": import_xml,
-            "rekordbox_playlists": sorted(self.rb_playlists, key=str.lower),
             "suggested_music_dirs": self._suggested_music_dirs(),
         }
 
@@ -439,47 +426,17 @@ class App:
 
     def set_import_settings(self, body: dict) -> dict:
         values = {}
-        for key in ("downloads_dir", "music_dir", "import_playlist", "import_xml"):
+        for key in ("downloads_dir", "music_dir"):
             if body.get(key) is not None:
                 v = str(body[key]).strip()
-                if not v and key != "import_playlist":
+                if not v:
                     raise ApiError("Valeur vide.")
-                values[key] = os.path.expanduser(v) if key != "import_playlist" else v
-        for key in ("auto_import", "keep_original"):
+                values[key] = os.path.expanduser(v)
+        for key in ("keep_original",):
             if key in body:
                 values[key] = bool(body[key])
         config.update(self.config_path, **values)
-        self.write_import_xml()
         return self.import_settings()
-
-    def _import_playlist_name(self) -> str:
-        return (self.import_settings()["import_playlist"] or self._last_playlist_name
-                or "compare2mix")
-
-    def write_import_xml(self) -> str | None:
-        """(Re)write the XML Rekordbox imports: designated playlist = its current
-        tracks + imported files not yet in the collection."""
-        pending = self._pending_imports()
-        settings = self.import_settings()
-        if not importer.is_available(settings["import_xml"]):
-            return None  # XML kept on an unplugged key: rewritten when it comes back
-        if not pending and not Path(settings["import_xml"]).exists():
-            return None
-        name = self._import_playlist_name()
-        tracks: list[Track] = []
-        seen: set[str] = set()
-        for t in self.rb_playlists.get(name, []) + [i.to_track() for i in pending]:
-            if t.location and t.location not in seen:
-                seen.add(t.location)
-                tracks.append(t)
-        rekordbox.write_import_xml(settings["import_xml"], name, tracks)
-        return settings["import_xml"]
-
-    def import_xml_bytes(self) -> bytes:
-        path = self.write_import_xml() if self._pending_imports() else None
-        if not path:
-            raise ApiError("Aucun morceau à importer pour l'instant.", 404)
-        return Path(path).read_bytes()
 
     def missing_tracks(self) -> list[Track]:
         """Missing tracks of every playlist compared during this session."""
@@ -514,13 +471,12 @@ class App:
         """Step 4: audio files in Downloads vs. the playlist's missing tracks.
 
         Nothing is moved here: the user picks the files, then step 5 transfers
-        them one by one (import_download) and builds the XML (build_import_xml).
+        them one by one (import_download), then calls transfer_done.
         """
         if not self.collection:
             raise ApiError("Charge d'abord ta bibliothèque Rekordbox.", 400, "no_library")
         pid = spotify.parse_playlist_id(playlist_id)
         entry = self._playlist(pid)
-        self._last_playlist_name = entry["name"]
         missing = [t for t in entry["tracks"] if self._resolve(t).status == Status.MISSING]
         settings = self.import_settings()
         with self.scan_lock:
@@ -562,20 +518,9 @@ class App:
             },
         }
 
-    def build_import_xml(self) -> dict:
-        """Last step: write the XML with the designated playlist (current tracks
-        + every transferred file not yet in the Rekordbox export)."""
-        pending = self._pending_imports()
-        if not pending:
-            raise ApiError("Aucun morceau à importer pour l'instant.", 404)
-        path = self.write_import_xml()
-        if not path:
-            raise ApiError("Impossible d'écrire le fichier d'import : son dossier est sur une "
-                           "clé qui n'est pas branchée.", 409, "volume")
-        name = self._import_playlist_name()
-        return {"path": path, "playlist": name,
-                "existing": len(self.rb_playlists.get(name, [])), "new": len(pending),
-                "export_archived": self.archive_downloads_export()}
+    def transfer_done(self) -> dict:
+        """End of step 5: the Rekordbox export in Downloads has been used."""
+        return {"export_archived": self.archive_downloads_export()}
 
     def archive_downloads_export(self) -> str | None:
         """Rename the Rekordbox export read from Downloads ("… (traité).xml") so
@@ -607,9 +552,6 @@ class App:
         # "renamed": a file with the same name was already there, so "(2)" was added.
         return {"imported": entry.spotify_display, "file": entry.file,
                 "renamed": Path(entry.file).name != wanted}
-
-    def ignore_download(self, source: str) -> None:
-        self.imports.ignore(source)
 
     def search(self, query: str) -> list[dict]:
         return [track_json(t) for t in self.matcher.search(query, limit=12)]
@@ -736,12 +678,6 @@ def make_handler(app: App):
                 return self._run(lambda: self._json(app.import_settings()))
             if path == "/api/search":
                 return self._run(lambda: self._json(app.search(q.get("q", ""))))
-            if path == "/api/import.xml":
-                def download_xml():
-                    body = app.import_xml_bytes()
-                    self._send(200, body, "application/xml; charset=utf-8",
-                               {"Content-Disposition": 'attachment; filename="compare2mix-import.xml"'})
-                return self._run(download_xml)
             if path == "/api/export.csv":
                 def export():
                     text, filename = app.export_csv(q.get("playlist", ""))
@@ -772,14 +708,11 @@ def make_handler(app: App):
                                                        bool(body.get("read_tags"))))
                 if path == "/api/library/from-downloads":
                     return self._json(app.library_from_downloads())
-                if path == "/api/import-xml":
-                    return self._json(app.build_import_xml())
+                if path == "/api/transfer-done":
+                    return self._json(app.transfer_done())
                 if path == "/api/import":
                     return self._json(app.import_download(body.get("source", ""),
                                                           body.get("spotify_key", "")))
-                if path == "/api/ignore":
-                    app.ignore_download(body.get("source", ""))
-                    return self._json({"ok": True})
                 if path == "/api/import-settings":
                     return self._json(app.set_import_settings(body))
                 if path == "/api/default-playlist":

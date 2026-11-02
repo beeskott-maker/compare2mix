@@ -13,7 +13,7 @@ import pytest
 from mutagen.wave import WAVE
 from mutagen.id3 import TIT2, TPE1, TSRC
 
-from compare2mix import importer, rekordbox, web
+from compare2mix import importer, web
 from compare2mix.decisions import DecisionStore
 from compare2mix.models import Status, Track
 
@@ -122,15 +122,7 @@ def test_import_moves_file_and_logs(tmp_path):
     assert again.pending({entry.file}) == [again.imported[1]]
 
 
-def test_import_xml_roundtrip(tmp_path):
-    tracks = [Track("Café", ["Énergie"], 300, location="/Users/me/Music/a b/Café.mp3", mix="Dub")]
-    out = tmp_path / "imp.xml"
-    rekordbox.write_import_xml(out, "À mixer", tracks)
-    back = rekordbox.load_xml_playlists(out)
-    assert list(back) == ["À mixer"]
-    t = back["À mixer"][0]
-    assert (t.title, t.artists, t.location, t.mix, t.duration_s) == \
-        ("Café", ["Énergie"], "/Users/me/Music/a b/Café.mp3", "Dub", 300)
+
 
 
 # ---- end to end through the web API ------------------------------------------
@@ -143,8 +135,7 @@ def env(tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({
         "client_id": "abc", "downloads_dir": str(tmp_path / "Downloads"),
-        "music_dir": str(tmp_path / "Music"), "import_playlist": "Warm up",
-        "import_xml": str(tmp_path / "Music" / "rekordbox-import.xml"), "keep_original": False,
+        "music_dir": str(tmp_path / "Music"), "keep_original": False,
     }))
     app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
                   spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
@@ -166,7 +157,7 @@ def env(tmp_path, monkeypatch):
     httpd.server_close()
 
 
-def test_recap_then_transfer_then_xml(env):
+def test_recap_then_transfer(env):
     tmp, app, call = env
     make_wav(tmp / "Downloads" / "whatever.wav", title="Some Unknown Track", artist="Nobody",
              seconds=300)  # same length as on Spotify (5:00)
@@ -191,23 +182,18 @@ def test_recap_then_transfer_then_xml(env):
     assert res == {"imported": "Nobody – Some Unknown Track", "file": str(moved),
                    "renamed": False}
     assert moved.exists() and not (tmp / "Downloads" / "whatever.wav").exists()
-    x = call("/api/import-xml", {})
-    assert (x["playlist"], x["existing"], x["new"]) == ("Warm up", 2, 1)
-    pl = rekordbox.load_xml_playlists(x["path"])["Warm up"]
-    assert [t.title for t in pl] == ["Strobe", "Losing It", "Some Unknown Track"]
-    assert pl[-1].location == str(moved)
+    assert call("/api/transfer-done", {}) == {"export_archived": None}  # XML given by hand
 
     # The track now shows as found, flagged as downloaded; the recap no longer lists it.
     res = {r["key"]: r for r in call("/api/compare", {"playlist": pid})["results"]}
     assert res["spotify:track:9"]["status"] == "found" and res["spotify:track:9"]["method"] == "import"
     assert call(f"/api/recap?playlist={pid}")["matches"] == []
 
-    # Once the file is in a new Rekordbox export, there is nothing left to import.
+    # Once the file is in a new Rekordbox export, it is no longer pending.
+    assert app.library_status()["pending_import"] == 1
     app.collection.append(Track("Some Unknown Track", ["Nobody"], location=str(moved)))
     app._rebuild_library()
-    with pytest.raises(urllib.error.HTTPError) as e:
-        call("/api/import-xml", {})
-    assert e.value.code == 404
+    assert app.library_status()["pending_import"] == 0
 
 
 def test_doubtful_match_is_listed_as_probable(env):
@@ -216,21 +202,6 @@ def test_doubtful_match_is_listed_as_probable(env):
     r = call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")
     assert [(m["status"], m["spotify_key"]) for m in r["matches"]] == [("probable", "spotify:track:9")]
     assert any("live" in n for n in r["matches"][0]["notes"])
-
-
-def test_import_playlist_defaults_to_spotify_name(tmp_path):
-    from test_web import FakeSpotify
-    cfg = tmp_path / "config.json"
-    cfg.write_text(json.dumps({"client_id": "abc", "downloads_dir": str(tmp_path / "Downloads"),
-                               "music_dir": str(tmp_path / "Music"),
-                               "import_xml": str(tmp_path / "import.xml")}))
-    app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
-                  spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
-    app.load_library(str(FIX / "rekordbox_sample.xml"))
-    app.compare("1xZn2Qs4ytrn5EfOGJDxft")
-    src = make_wav(tmp_path / "Downloads" / "x.wav", title="Some Unknown Track", artist="Nobody")
-    app.import_download(str(src), "spotify:track:9")
-    assert app.build_import_xml()["playlist"] == "À mixer"
 
 
 # ---- Rekordbox export dropped in Downloads ------------------------------------
@@ -263,8 +234,7 @@ def test_library_picked_up_from_downloads(tmp_path, monkeypatch):
     from test_web import FakeSpotify
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({"client_id": "abc", "downloads_dir": str(tmp_path / "Downloads"),
-                               "music_dir": str(tmp_path / "Music"),
-                               "import_xml": str(tmp_path / "import.xml")}))
+                               "music_dir": str(tmp_path / "Music")}))
     app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
                   spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
     assert app.check_downloads_for_library() is None  # nothing there
@@ -349,7 +319,7 @@ def test_export_renamed_after_transfer(env, tmp_path):
     make_wav(dl / "whatever.wav", title="Some Unknown Track", artist="Nobody")
     m = call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")["matches"][0]
     call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"]})
-    x = call("/api/import-xml", {})
+    x = call("/api/transfer-done", {})
     assert x["export_archived"] == "rekordbox (traité).xml"
     assert not export.exists() and (dl / "rekordbox (traité).xml").exists()
     # The renamed export is no longer picked up, the library stays loaded.
@@ -386,15 +356,3 @@ def test_is_known_only_while_the_import_is_real(tmp_path):
     assert not log.is_known(str(src))  # downloaded again since: a new file
     log.ignore(str(tmp_path / "x.wav"))
     assert not log.is_known(str(tmp_path / "x.wav"))  # old "ignored" list unused
-
-
-def test_import_xml_looks_like_a_rekordbox_export(tmp_path):
-    out = tmp_path / "i.xml"
-    path = "/Volumes/BSK/_Musique/Sidekick - Deep Fear (Lumberjack & BRØMANCE Remix Edit).wav"
-    rekordbox.write_import_xml(out, "À mixer", [Track("Deep Fear", ["Sidekick"], location=path)])
-    text = out.read_text(encoding="utf-8")
-    assert text.startswith('<?xml version="1.0" encoding="UTF-8"?>')
-    # Exactly how Rekordbox 7 writes this path in its own export.
-    assert ('Location="file://localhost/Volumes/BSK/_Musique/Sidekick%20-%20Deep%20Fear%20'
-            '(Lumberjack%20%26%20BR%c3%98MANCE%20Remix%20Edit).wav"') in text
-    assert rekordbox.load_xml(out)[0].location == path

@@ -75,28 +75,21 @@ en 5 étapes :
    non reconnus, les morceaux toujours manquants et la destination. Chaque fichier est renommé
    « ARTISTE - TITRE.ext » d'après ses tags (ou d'après Spotify s'il n'en a pas), sauf s'il porte
    déjà ce nom ; le nouveau nom est affiché ici. **Rien n'est déplacé ici.**
-5. **Copie & XML** : « Lancer la copie » déplace les fichiers cochés vers la clé avec une barre de
-   progression, puis génère le fichier XML à importer dans Rekordbox (bouton de téléchargement et
-   mode d'emploi). L'export Rekordbox lu dans Téléchargements est alors renommé
-   « … (traité).xml » : il ne sera plus relu (la bibliothèque reste chargée).
+5. **Copie** : « Lancer la copie » déplace les fichiers cochés vers la clé avec une barre de
+   progression. Il reste à les glisser depuis le Finder sur ta playlist dans Rekordbox. L'export
+   Rekordbox lu dans Téléchargements est alors renommé « … (traité).xml » : il ne sera plus relu
+   (la bibliothèque reste chargée).
 
 « Tracks absents de la clé » : morceaux de ta collection Rekordbox dont le fichier n'est pas sur la
 clé USB (restés sur le Mac, liens Apple Music…) et, clé branchée, ceux dont le fichier n'y est
 plus.
 
 Le lien **Réglages** (en haut) permet de changer le dossier Téléchargements, le dossier de
-rangement sur la clé (avec suggestion), copier au lieu de déplacer, la playlist Rekordbox cible
-(par défaut le même nom que la playlist Spotify) et l'emplacement du fichier d'import.
+rangement sur la clé (avec suggestion) et copier au lieu de déplacer.
 
-compare2mix n'écrit jamais dans la base de Rekordbox (`master.db`) : l'import XML est la voie
-officielle et sans risque pour ta collection. Si la clé n'est pas branchée, rien n'est écrit
-(pas de faux dossier sur le disque du Mac) : branche-la puis « Revérifier ».
-
-Dans Rekordbox (réglage à faire une fois) : Préférences → Affichage → Disposition → cocher
-« rekordbox xml », puis Préférences → Avancé → Base de données → « Bibliothèque rekordbox xml » →
-choisir `~/Music/compare2mix/rekordbox-import.xml` (copie toujours à jour). Ensuite, à chaque fois :
-barre latérale → rekordbox xml → Listes de lecture → clic droit sur la playlist → **Importer la
-liste de lecture**. La playlist contient ses morceaux actuels + les nouveaux.
+compare2mix n'écrit jamais dans Rekordbox : il range les fichiers, tu les ajoutes toi-même. Si la
+clé n'est pas branchée, rien n'est écrit (pas de faux dossier sur le disque du Mac) : branche-la
+puis « Revérifier ».
 
 ## Options utiles
 
@@ -134,7 +127,7 @@ Structure : `compare2mix/rekordbox.py` (lecture XML / master.db), `spotify.py` (
 - [x] Moteur de comparaison + ligne de commande
 - [x] Interface web locale (choix de la playlist, validation manuelle des « probables »)
 - [x] Mémorisation des correspondances validées à la main
-- [x] Récupération des fichiers téléchargés et import dans Rekordbox (via XML)
+- [x] Récupération des fichiers téléchargés, renommés et rangés sur la clé
 - [ ] Comparer toutes les playlists d'un coup (liste d'achats unique)
 - [ ] Playlist Spotify « À acheter »
 - [ ] Comparaison avec une playlist Rekordbox précise plutôt que toute la collection

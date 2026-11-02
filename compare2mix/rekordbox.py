@@ -12,10 +12,9 @@ Two sources are supported:
 from __future__ import annotations
 
 import os
-import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import unquote, urlparse
 
 from .models import Track
 from .normalize import split_artists
@@ -97,57 +96,6 @@ def load_xml_playlists(path: str | os.PathLike) -> dict[str, list[Track]]:
         out[name] = items
     return out
 
-
-def _path_to_location(path: str) -> str:
-    """'/Users/me/a b.mp3' -> 'file://localhost/Users/me/a%20b.mp3' (Rekordbox style)."""
-    # Encoded like Rekordbox's own exports: "(" ")" kept, lowercase hex
-    # ("BR%c3%98MANCE", "Don%27t").
-    encoded = quote(os.path.abspath(path), safe="/:()")
-    return "file://localhost" + re.sub(r"%[0-9A-F]{2}", lambda m: m.group(0).lower(), encoded)
-
-
-def write_import_xml(path: str | os.PathLike, playlist_name: str,
-                     tracks: list[Track]) -> None:
-    """Write a Rekordbox XML holding one playlist with ``tracks``.
-
-    Meant to be set in Rekordbox as the "rekordbox xml" library, then imported
-    with "Importer la liste de lecture". Tracks already in the collection are
-    recognised by their file path and not duplicated.
-    """
-    root = ET.Element("DJ_PLAYLISTS", Version="1.0.0")
-    ET.SubElement(root, "PRODUCT", Name="compare2mix", Version="0.1.0", Company="")
-    collection = ET.SubElement(root, "COLLECTION", Entries=str(len(tracks)))
-    playlists = ET.SubElement(root, "PLAYLISTS")
-    root_node = ET.SubElement(playlists, "NODE", Type="0", Name="ROOT", Count="1")
-    node = ET.SubElement(root_node, "NODE", Name=playlist_name, Type="1", KeyType="0",
-                         Entries=str(len(tracks)))
-    for i, t in enumerate(tracks, start=1):
-        attrs = {
-            "TrackID": str(i),
-            "Name": t.title,
-            "Artist": t.artist_str,
-            "Location": _path_to_location(t.location or ""),
-        }
-        if t.album:
-            attrs["Album"] = t.album
-        if t.mix:
-            attrs["Mix"] = t.mix
-        if t.remixer:
-            attrs["Remixer"] = t.remixer
-        if t.duration_s:
-            attrs["TotalTime"] = str(int(round(t.duration_s)))
-        ET.SubElement(collection, "TRACK", **attrs)
-        ET.SubElement(node, "TRACK", Key=str(i))
-    ET.indent(root)
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    # Same header as Rekordbox's own exports (double quotes): Rekordbox's XML
-    # reader is stricter than the standard and rejected ElementTree's
-    # single-quoted declaration.
-    tmp.write_text('<?xml version="1.0" encoding="UTF-8"?>\n\n'
-                   + ET.tostring(root, encoding="unicode") + "\n", encoding="utf-8")
-    tmp.replace(path)
 
 
 def load_xml_playlist_names(path: str | os.PathLike) -> list[str]:

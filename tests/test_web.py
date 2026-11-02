@@ -69,8 +69,7 @@ def server(tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({"client_id": "abc",
                                "downloads_dir": str(tmp_path / "Downloads"),
-                               "music_dir": str(tmp_path / "Music"),
-                               "import_xml": str(tmp_path / "import.xml")}))
+                               "music_dir": str(tmp_path / "Music")}))
     app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "decisions.json"),
                   spotify_factory=FakeSpotify,
                   imports=importer.ImportLog(tmp_path / "imports.json"))
@@ -214,10 +213,3 @@ def test_library_upload(server, tmp_path):
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(bad)
     assert e.value.code == 400
-
-
-def test_import_xml_download_when_empty(server):
-    base, _ = server
-    with pytest.raises(urllib.error.HTTPError) as e:
-        call(base, "/api/import.xml")
-    assert e.value.code == 404
