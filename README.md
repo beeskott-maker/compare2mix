@@ -71,8 +71,8 @@ en 3 étapes. Quand tout est déjà prêt, elle s'ouvre directement à l'étape 
 2. **Résultats** : la playlist par défaut (« À mixer » ou celle marquée ★) est comparée
    automatiquement ; onglets ❌ / 🟡 / ✅, clic sur un titre = copie du lien Spotify, copie de la
    liste des manquants, export CSV, corrections d'un clic (mémorisées).
-3. **Téléchargements → Rekordbox** : surveillance du dossier Téléchargements, copie des morceaux
-   reconnus vers la clé, puis téléchargement du fichier XML à importer dans Rekordbox.
+3. **Téléchargements → Rekordbox** : surveillance du dossier Téléchargements, déplacement des
+   morceaux reconnus vers la clé, puis téléchargement du fichier XML à importer dans Rekordbox.
 
 ## Téléchargements → Rekordbox
 
@@ -81,8 +81,8 @@ Quand l'interface web est ouverte, compare2mix surveille ton dossier **Télécha
 
 1. chaque nouveau fichier audio (MP3, WAV, AIFF, FLAC, M4A) est lu (tags, sinon nom du fichier)
    et comparé aux morceaux **manquants** des playlists comparées ;
-2. correspondance sûre ✅ : le fichier est **copié** vers le dossier choisi (ta clé USB ; l'original
-   reste dans Téléchargements, option pour le déplacer) et le morceau passe en ✅ « téléchargé » ;
+2. correspondance sûre ✅ : le fichier est **déplacé** vers le dossier choisi (ta clé USB ; option
+   pour garder l'original dans Téléchargements) et le morceau passe en ✅ « téléchargé » ;
    correspondance douteuse 🟡 : bouton **Copier vers la clé** / **Ignorer** ;
 3. bouton **Télécharger le fichier XML à importer** : il contient la playlist Rekordbox désignée
    (⚙ Réglages) avec **ses morceaux actuels + les nouveaux**. Une copie toujours à jour est aussi

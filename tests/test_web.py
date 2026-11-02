@@ -193,9 +193,9 @@ def test_default_playlist(server):
     assert call(base, "/api/status")["default_playlist"] == "0Zarq4BVkFkZOWkmqsfrjA"
 
 
-def test_copy_is_the_default(server):
+def test_move_is_the_default(server):
     base, _ = server
-    assert call(base, "/api/import-settings")["keep_original"] is True
+    assert call(base, "/api/import-settings")["keep_original"] is False
 
 
 def test_library_upload(server, tmp_path):

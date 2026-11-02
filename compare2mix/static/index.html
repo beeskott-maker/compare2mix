@@ -219,7 +219,7 @@
   <!-- ================= STEP 3 ================= -->
   <section class="step hidden" id="step3">
     <p class="step-intro">Achète les morceaux manquants : dès qu'ils arrivent dans ton dossier de téléchargements,
-      ils sont reconnus et copiés vers ta clé. Télécharge ensuite le fichier à importer dans Rekordbox.</p>
+      ils sont reconnus et rangés sur ta clé. Télécharge ensuite le fichier à importer dans Rekordbox.</p>
 
     <div class="panel">
       <h2>📥 Dossier surveillé</h2>
@@ -233,14 +233,14 @@
         <div class="form-grid">
           <label for="setDownloads">Dossier surveillé</label>
           <input type="text" id="setDownloads" spellcheck="false">
-          <label for="setMusic">Copier les morceaux vers</label>
+          <label for="setMusic">Ranger les morceaux dans</label>
           <input type="text" id="setMusic" list="musicDirs" spellcheck="false" placeholder="/Volumes/NOM_DE_TA_CLE/Musique">
           <span></span>
           <label class="check"><input type="checkbox" id="setKeep"> garder l'original dans le dossier surveillé (copier plutôt que déplacer)</label>
           <label for="setPlaylist">Playlist Rekordbox</label>
           <input type="text" id="setPlaylist" list="rbPlaylists" spellcheck="false">
           <span></span>
-          <label class="check"><input type="checkbox" id="setAuto"> copier automatiquement les correspondances sûres ✅</label>
+          <label class="check"><input type="checkbox" id="setAuto"> ranger automatiquement les correspondances sûres ✅</label>
           <label for="setXml">Copie du fichier d'import</label>
           <input type="text" id="setXml" spellcheck="false">
           <span></span>
@@ -722,8 +722,8 @@ async function scanDownloads(manual = false) {
     renderDownloads(d);
     if (d.imported_now.length) {
       state.needsRefresh = true;
-      toast(d.imported_now.length === 1 ? `Copié vers la clé : ${d.imported_now[0]}`
-        : `${d.imported_now.length} morceaux copiés vers la clé`);
+      toast(d.imported_now.length === 1 ? `Rangé sur la clé : ${d.imported_now[0]}`
+        : `${d.imported_now.length} morceaux rangés sur la clé`);
     } else if (manual) {
       toast(d.to_confirm.length ? "Des fichiers attendent ta confirmation" : "Rien de nouveau");
     }
@@ -750,7 +750,7 @@ function renderDownloads(d) {
   if (!d.can_import) {
     const key = (d.settings.music_volume || "").split("/").pop();
     warn.textContent = `⚠ La clé « ${key} » n'est pas branchée : les fichiers restent dans le dossier surveillé `
-      + "et seront copiés automatiquement dès que tu la brancheras.";
+      + "et seront rangés automatiquement dès que tu la brancheras.";
   }
 
   $("dlConfirm").replaceChildren(...d.to_confirm.map((c) => el("div", { class: "item" },
@@ -762,10 +762,10 @@ function renderDownloads(d) {
       el("button", { class: "small primary", disabled: !d.can_import, onclick: (e) => busy(e.currentTarget, async () => {
         await api("/api/import", { source: c.source, spotify_key: c.spotify_key });
         state.needsRefresh = true;
-        toast(`Copié vers la clé : ${c.spotify.display}`);
+        toast(`Rangé sur la clé : ${c.spotify.display}`);
         dl.lastRender = "";
         await scanDownloads();
-      }) }, "Copier vers la clé"),
+      }) }, "Ranger sur la clé"),
       el("button", { class: "small", onclick: (e) => busy(e.currentTarget, async () => {
         await api("/api/ignore", { source: c.source });
         await scanDownloads();
@@ -789,7 +789,7 @@ function renderDownloads(d) {
         el("p", {}, `${d.settings.keep_original ? "Copiés" : "Déplacés"} dans `, el("code", {}, d.settings.music_dir), " :"),
         el("ul", { class: "notes" }, pending.map((p) => el("li", { title: p.file },
           p.spotify, el("span", { class: "muted" }, "  → " + p.name)))))
-    : el("p", {}, "Aucun nouveau morceau pour l'instant. Ils apparaîtront ici dès qu'ils seront copiés vers ta clé."));
+    : el("p", {}, "Aucun nouveau morceau pour l'instant. Ils apparaîtront ici dès qu'ils seront rangés sur ta clé."));
   $("xmlDownload").disabled = !pending.length;
   $("xmlDownload").textContent = pending.length
     ? `⬇ Télécharger le fichier XML à importer (${plural(pending.length, "morceau", "morceaux")})`

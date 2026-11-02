@@ -368,7 +368,7 @@ class App:
             "music_dir": music_dir,
             "music_dir_available": importer.is_available(music_dir),
             "music_volume": importer.volume_root(music_dir),
-            "keep_original": bool(s.get("keep_original", True)),
+            "keep_original": bool(s.get("keep_original", False)),
             "import_playlist": s.get("import_playlist") or "compare2mix",
             "auto_import": s.get("auto_import", True),
             "import_xml": import_xml,
