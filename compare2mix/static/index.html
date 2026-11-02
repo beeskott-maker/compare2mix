@@ -537,7 +537,7 @@ async function decide(btn, spotifyKey, action, libraryKey) {
 }
 
 // ---------- downloads -> Rekordbox ----------------------------------------
-const dl = { settings: null, timer: null, scanning: false };
+const dl = { settings: null, timer: null, scanning: false, howtoOpen: false, lastRender: "" };
 
 function fillSettings(st) {
   dl.settings = st;
@@ -579,6 +579,11 @@ async function scanDownloads(manual = false) {
 }
 
 function renderDownloads(d) {
+  // The scan runs every 8 s: only redraw when something changed, so that open
+  // sections, hovered buttons and scroll position are left alone.
+  const signature = JSON.stringify([d.watching, d.missing, d.to_confirm, d.pending, d.unmatched, d.settings]);
+  if (signature === dl.lastRender) return;
+  dl.lastRender = signature;
   $("dlStatus").textContent = d.missing
     ? `Surveillance de ${d.watching} · ${d.missing} morceau${d.missing > 1 ? "x" : ""} manquant${d.missing > 1 ? "s" : ""} recherché${d.missing > 1 ? "s" : ""}`
     : `Surveillance de ${d.watching} · aucun manquant à rechercher`;
@@ -609,7 +614,7 @@ function renderDownloads(d) {
       el("div", {}, el("b", {}, `✅ ${pending.length} morceau${pending.length > 1 ? "x" : ""} prêt${pending.length > 1 ? "s" : ""} à importer dans Rekordbox`),
         el("span", { class: "muted" }, ` (playlist « ${st.import_playlist} »)`)),
       el("ul", { class: "notes" }, pending.map((p) => el("li", {}, p.spotify))),
-      el("details", {},
+      el("details", { open: dl.howtoOpen, ontoggle: (e) => { dl.howtoOpen = e.currentTarget.open; } },
         el("summary", {}, "Comment les importer dans Rekordbox"),
         el("p", { class: "muted" }, "Réglage à faire une seule fois :"),
         el("ol", { class: "howto" },
