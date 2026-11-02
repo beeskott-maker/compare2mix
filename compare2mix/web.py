@@ -145,6 +145,24 @@ class App:
         config.update(self.config_path, library_path=os.path.abspath(path), read_tags=read_tags)
         return self.library_status()
 
+    MAX_UPLOAD = 300 * 1024 * 1024
+
+    def upload_library(self, data: bytes, filename: str, read_tags: bool = False) -> dict:
+        """Library XML sent from the browser: keep a copy and load it."""
+        if not data:
+            raise ApiError("Fichier vide.")
+        if "<DJ_PLAYLISTS" not in data[:65536].decode("utf-8", "ignore"):
+            raise ApiError("Ce fichier n'est pas un export XML de Rekordbox "
+                           "(Fichier → Exporter la collection au format xml).")
+        dest = self.config_path.parent / "rekordbox-library.xml"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_suffix(".tmp")
+        tmp.write_bytes(data)
+        tmp.replace(dest)
+        self.load_library(str(dest), read_tags)
+        config.update(self.config_path, library_name=filename or "rekordbox.xml")
+        return self.library_status()
+
     def _collection_locations(self) -> set[str]:
         return {t.location for t in self.collection if t.location}
 
@@ -162,6 +180,7 @@ class App:
         path = self.library_path or self.settings.get("library_path")
         return {
             "path": path,
+            "name": self.settings.get("library_name") or (os.path.basename(path) if path else None),
             "available": bool(path) and importer.is_available(path),
             "count": len(self.collection),
             "pending_import": len(self._pending_imports()),
@@ -320,7 +339,7 @@ class App:
             "music_dir": music_dir,
             "music_dir_available": importer.is_available(music_dir),
             "music_volume": importer.volume_root(music_dir),
-            "keep_original": bool(s.get("keep_original", False)),
+            "keep_original": bool(s.get("keep_original", True)),
             "import_playlist": s.get("import_playlist") or "compare2mix",
             "auto_import": s.get("auto_import", True),
             "import_xml": import_xml,
@@ -372,6 +391,12 @@ class App:
                 tracks.append(t)
         rekordbox.write_import_xml(settings["import_xml"], name, tracks)
         return settings["import_xml"]
+
+    def import_xml_bytes(self) -> bytes:
+        path = self.write_import_xml() if self._pending_imports() else None
+        if not path:
+            raise ApiError("Aucun morceau à importer pour l'instant.", 404)
+        return Path(path).read_bytes()
 
     def missing_tracks(self) -> list[Track]:
         """Missing tracks of every playlist compared during this session."""
@@ -581,6 +606,12 @@ def make_handler(app: App):
                 return self._run(lambda: self._json(app.import_settings()))
             if path == "/api/search":
                 return self._run(lambda: self._json(app.search(q.get("q", ""))))
+            if path == "/api/import.xml":
+                def download_xml():
+                    body = app.import_xml_bytes()
+                    self._send(200, body, "application/xml; charset=utf-8",
+                               {"Content-Disposition": 'attachment; filename="compare2mix-import.xml"'})
+                return self._run(download_xml)
             if path == "/api/export.csv":
                 def export():
                     text, filename = app.export_csv(q.get("playlist", ""))
@@ -596,6 +627,15 @@ def make_handler(app: App):
             path = urllib.parse.urlparse(self.path).path
 
             def route():
+                if path == "/api/library/upload":
+                    length = int(self.headers.get("Content-Length") or 0)
+                    if length > app.MAX_UPLOAD:
+                        raise ApiError("Fichier trop gros.", 413)
+                    data = self.rfile.read(length)
+                    q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    name = urllib.parse.unquote(self.headers.get("X-Filename") or "")
+                    return self._json(app.upload_library(data, name,
+                                                         q.get("read_tags", ["0"])[0] == "1"))
                 body = self._body()
                 if path == "/api/library":
                     return self._json(app.load_library(body.get("path", ""),

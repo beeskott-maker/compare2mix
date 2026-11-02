@@ -59,21 +59,17 @@ ou duplique-la d'abord dans ta bibliothèque Spotify.
 compare2mix web
 ```
 
-La page s'ouvre dans le navigateur sur <http://127.0.0.1:8888/> (elle ne tourne que sur ton Mac) :
+La page s'ouvre sur <http://127.0.0.1:8888/> (elle ne tourne que sur ton Mac) sous forme d'assistant
+en 3 étapes. Quand tout est déjà prêt, elle s'ouvre directement à l'étape 2.
 
-- au lancement, la playlist par défaut (« À mixer », ou celle marquée **★ Par défaut**) est
-  sélectionnée et comparée automatiquement ; changer de playlist relance la comparaison ;
-- choix de la playlist dans la liste (les abonnements non lisibles sont grisés) ;
-- résultats triés : ❌ manquants, 🟡 à vérifier, ✅ trouvés, avec filtre texte ;
-- corrections d'un clic : **C'est bien lui** / **Ce n'est pas lui** / **Je l'ai, le chercher…**
-  (recherche dans la bibliothèque) / **Annuler mes choix** ;
-- tes choix sont mémorisés dans `~/.compare2mix/decisions.json` et valent pour toutes les
-  playlists (y compris en ligne de commande) ;
-- export CSV et copie de la liste des manquants.
-
-La bibliothèque utilisée la dernière fois est rechargée automatiquement. Après un nouvel export
-XML depuis Rekordbox, clique sur la pastille « Rekordbox » puis sur **Charger**.
-Laisse le Terminal ouvert pendant l'utilisation (`Ctrl+C` pour arrêter).
+1. **Connexion & bibliothèque** : test de la connexion Spotify (Client ID, connexion,
+   déconnexion) et envoi du fichier XML Rekordbox (glisser-déposer ou sélection ; par ex. depuis la
+   clé USB). Une copie est gardée : à refaire seulement après un nouvel export.
+2. **Résultats** : la playlist par défaut (« À mixer » ou celle marquée ★) est comparée
+   automatiquement ; onglets ❌ / 🟡 / ✅, clic sur un titre = copie du lien Spotify, copie de la
+   liste des manquants, export CSV, corrections d'un clic (mémorisées).
+3. **Téléchargements → Rekordbox** : surveillance du dossier Téléchargements, copie des morceaux
+   reconnus vers la clé, puis téléchargement du fichier XML à importer dans Rekordbox.
 
 ## Téléchargements → Rekordbox
 
@@ -82,10 +78,12 @@ Quand l'interface web est ouverte, compare2mix surveille ton dossier **Télécha
 
 1. chaque nouveau fichier audio (MP3, WAV, AIFF, FLAC, M4A) est lu (tags, sinon nom du fichier)
    et comparé aux morceaux **manquants** des playlists comparées ;
-2. correspondance sûre ✅ : le fichier est **déplacé** dans `~/Music/compare2mix/` et le morceau
-   passe en ✅ « téléchargé » ; correspondance douteuse 🟡 : bouton **Importer** / **Ignorer** ;
-3. compare2mix écrit `~/Music/compare2mix/rekordbox-import.xml`, qui contient la playlist
-   Rekordbox désignée (⚙ Réglages) avec **ses morceaux actuels + les nouveaux**.
+2. correspondance sûre ✅ : le fichier est **copié** vers le dossier choisi (ta clé USB ; l'original
+   reste dans Téléchargements, option pour le déplacer) et le morceau passe en ✅ « téléchargé » ;
+   correspondance douteuse 🟡 : bouton **Copier vers la clé** / **Ignorer** ;
+3. bouton **Télécharger le fichier XML à importer** : il contient la playlist Rekordbox désignée
+   (⚙ Réglages) avec **ses morceaux actuels + les nouveaux**. Une copie toujours à jour est aussi
+   écrite dans `~/Music/compare2mix/rekordbox-import.xml`.
 
 Dans Rekordbox (réglage à faire une fois) : Préférences → Avancé → Base de données →
 « Bibliothèque rekordbox xml » → choisir ce fichier, et Préférences → Affichage → Disposition →

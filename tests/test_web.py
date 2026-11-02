@@ -69,7 +69,8 @@ def server(tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({"client_id": "abc",
                                "downloads_dir": str(tmp_path / "Downloads"),
-                               "music_dir": str(tmp_path / "Music")}))
+                               "music_dir": str(tmp_path / "Music"),
+                               "import_xml": str(tmp_path / "import.xml")}))
     app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "decisions.json"),
                   spotify_factory=FakeSpotify,
                   imports=importer.ImportLog(tmp_path / "imports.json"))
@@ -190,3 +191,33 @@ def test_default_playlist(server):
              {"playlist": "https://open.spotify.com/playlist/0Zarq4BVkFkZOWkmqsfrjA?si=x"})
     assert r["default_playlist"] == "0Zarq4BVkFkZOWkmqsfrjA"
     assert call(base, "/api/status")["default_playlist"] == "0Zarq4BVkFkZOWkmqsfrjA"
+
+
+def test_copy_is_the_default(server):
+    base, _ = server
+    assert call(base, "/api/import-settings")["keep_original"] is True
+
+
+def test_library_upload(server, tmp_path):
+    base, app = server
+    data = (FIX / "rekordbox_sample.xml").read_bytes()
+    req = urllib.request.Request(base + "/api/library/upload", data=data, headers={
+        "X-Compare2mix": "1", "X-Filename": "rekordbox%20cl%C3%A9.xml"})
+    with urllib.request.urlopen(req) as r:
+        st = json.loads(r.read())
+    assert st["count"] == 8 and st["name"] == "rekordbox clé.xml"
+    # A copy is kept next to the config, so it reloads at the next start.
+    assert Path(st["path"]).read_bytes() == data
+    # Something that is not a Rekordbox export is refused.
+    bad = urllib.request.Request(base + "/api/library/upload", data=b"<html></html>",
+                                 headers={"X-Compare2mix": "1"})
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(bad)
+    assert e.value.code == 400
+
+
+def test_import_xml_download_when_empty(server):
+    base, _ = server
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call(base, "/api/import.xml")
+    assert e.value.code == 404

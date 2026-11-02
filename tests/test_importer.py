@@ -129,6 +129,7 @@ def env(tmp_path, monkeypatch):
     cfg.write_text(json.dumps({
         "client_id": "abc", "downloads_dir": str(tmp_path / "Downloads"),
         "music_dir": str(tmp_path / "Music"), "import_playlist": "Warm up",
+        "import_xml": str(tmp_path / "Music" / "rekordbox-import.xml"), "keep_original": False,
     }))
     app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
                   spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
