@@ -88,6 +88,21 @@
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line);
     border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .dl-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .dl-head h2 { margin: 0; }
+  .dl-head .muted { flex: 1 1 200px; }
+  .dl-item { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    padding: 8px 10px; border-radius: 8px; background: var(--bg); margin-top: 6px; font-size: 14px; }
+  .dl-item .what { overflow-wrap: anywhere; flex: 1 1 300px; }
+  .form-grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; margin-top: 10px; }
+  .form-grid label { color: var(--muted); font-size: 14px; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  ol.howto { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
+  ol.howto li { margin: 3px 0; }
+  .pending-box { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--found-bg); }
+  .badge.import { background: var(--found-bg); color: var(--found); }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
   .hidden { display: none !important; }
   code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
   @media (max-width: 600px) {
@@ -148,6 +163,39 @@
       <button id="copyBtn" disabled title="Copier la liste des manquants">Copier les manquants</button>
     </div>
     <p id="plHint" class="hidden"></p>
+  </section>
+
+  <!-- Downloads -> Rekordbox -->
+  <section class="panel hidden" id="dlPanel">
+    <div class="dl-head">
+      <h2>📥 Téléchargements → Rekordbox</h2>
+      <span class="muted" id="dlStatus">…</span>
+      <button class="small" id="dlScan">Scanner maintenant</button>
+      <button class="small" id="dlSettingsBtn">⚙ Réglages</button>
+    </div>
+
+    <div id="dlSettings" class="hidden">
+      <div class="form-grid">
+        <label for="setDownloads">Dossier surveillé</label>
+        <input type="text" id="setDownloads" spellcheck="false">
+        <label for="setMusic">Ranger les morceaux dans</label>
+        <input type="text" id="setMusic" spellcheck="false">
+        <label for="setPlaylist">Playlist Rekordbox</label>
+        <input type="text" id="setPlaylist" list="rbPlaylists" spellcheck="false">
+        <span></span>
+        <label class="check"><input type="checkbox" id="setAuto"> importer automatiquement les correspondances sûres ✅</label>
+        <span></span>
+        <div><button id="setSave">Enregistrer</button></div>
+      </div>
+      <datalist id="rbPlaylists"></datalist>
+    </div>
+
+    <div id="dlConfirm"></div>
+    <div id="dlPending" class="pending-box hidden"></div>
+    <details id="dlUnmatchedBox" class="hidden">
+      <summary id="dlUnmatchedTitle"></summary>
+      <div id="dlUnmatched"></div>
+    </details>
   </section>
 
   <!-- Results -->
@@ -259,6 +307,7 @@ async function refreshStatus() {
   $("loginRow").classList.toggle("hidden", !sp.client_id);
 
   const ready = sp.logged_in && lib.count > 0;
+  $("dlPanel").classList.toggle("hidden", !ready);
   $("plPanel").classList.toggle("hidden", !sp.logged_in);
   $("compareBtn").disabled = !ready;
   if (sp.logged_in && !state.playlists.length) {
@@ -344,6 +393,7 @@ async function compare(refresh) {
     $("exportBtn").disabled = $("copyBtn").disabled = false;
     if (!state.data.counts.missing && state.filter === "missing") state.filter = "all";
     render();
+    if (!dl.settings) scanDownloads();
   });
 }
 $("compareBtn").addEventListener("click", () => compare(false));
@@ -412,7 +462,8 @@ function card(r) {
   c.append(el("div", { class: "line1" },
     el("span", {}, ICON[r.status]), spTitle,
     el("span", { class: "muted" }, mmss(r.spotify.duration)),
-    r.method === "manuel" ? el("span", { class: "badge manual" }, "choisi par toi")
+    r.method === "import" ? el("span", { class: "badge import" }, "📥 téléchargé")
+      : r.method === "manuel" ? el("span", { class: "badge manual" }, "choisi par toi")
       : r.match ? el("span", { class: "badge" }, `${r.method === "ISRC" ? "ISRC" : "score"} ${Math.round(r.score)}`) : null,
   ));
   if (r.match) {
@@ -428,7 +479,7 @@ function card(r) {
 
   if (r.status === "probable") {
     actions.append(act("✓ C'est bien lui", "confirm", r.match.key), act("✗ Ce n'est pas lui", "reject", r.match.key));
-  } else if (r.status === "found" && r.method !== "manuel") {
+  } else if (r.status === "found" && r.method !== "manuel" && r.method !== "import") {
     actions.append(act("✗ Pas le bon morceau", "reject", r.match.key));
   }
   if (r.status === "missing" && r.alternatives.length) {
@@ -484,6 +535,109 @@ async function decide(btn, spotifyKey, action, libraryKey) {
     toast({ confirm: "Association enregistrée", reject: "Candidat écarté", reset: "Choix annulés" }[action]);
   });
 }
+
+// ---------- downloads -> Rekordbox ----------------------------------------
+const dl = { settings: null, timer: null, scanning: false };
+
+function fillSettings(st) {
+  dl.settings = st;
+  $("setDownloads").value = st.downloads_dir;
+  $("setMusic").value = st.music_dir;
+  $("setPlaylist").value = st.import_playlist;
+  $("setAuto").checked = !!st.auto_import;
+  $("rbPlaylists").replaceChildren(...st.rekordbox_playlists.map((n) => el("option", { value: n })));
+}
+$("dlSettingsBtn").addEventListener("click", () => $("dlSettings").classList.toggle("hidden"));
+$("setSave").addEventListener("click", (e) => busy(e.currentTarget, async () => {
+  fillSettings(await api("/api/import-settings", {
+    downloads_dir: $("setDownloads").value, music_dir: $("setMusic").value,
+    import_playlist: $("setPlaylist").value, auto_import: $("setAuto").checked,
+  }));
+  $("dlSettings").classList.add("hidden");
+  toast("Réglages enregistrés");
+  scanDownloads();
+}));
+$("dlScan").addEventListener("click", (e) => busy(e.currentTarget, () => scanDownloads(true)));
+
+async function scanDownloads(manual = false) {
+  if (dl.scanning || $("dlPanel").classList.contains("hidden")) return;
+  dl.scanning = true;
+  try {
+    const d = await api("/api/downloads");
+    if (!dl.settings) fillSettings(d.settings);
+    renderDownloads(d);
+    if (d.imported_now.length) {
+      toast(d.imported_now.length === 1 ? `Importé : ${d.imported_now[0]}`
+        : `${d.imported_now.length} morceaux importés`);
+      if (state.data) await compare(false);
+    } else if (manual) {
+      toast(d.to_confirm.length ? "Des fichiers attendent ta confirmation" : "Rien de nouveau");
+    }
+  } catch (e) {
+    if (manual) toast(e.message, true);
+  } finally { dl.scanning = false; }
+}
+
+function renderDownloads(d) {
+  $("dlStatus").textContent = d.missing
+    ? `Surveillance de ${d.watching} · ${d.missing} morceau${d.missing > 1 ? "x" : ""} manquant${d.missing > 1 ? "s" : ""} recherché${d.missing > 1 ? "s" : ""}`
+    : `Surveillance de ${d.watching} · aucun manquant à rechercher`;
+
+  $("dlConfirm").replaceChildren(...d.to_confirm.map((c) => el("div", { class: "dl-item" },
+    el("div", { class: "what" },
+      el("div", {}, "🟡 ", el("b", {}, c.name)),
+      el("div", { class: "muted" }, `→ ${c.spotify.display}  (score ${Math.round(c.score)})`
+        + (c.notes.length ? " · " + c.notes.join(" · ") : ""))),
+    el("div", { class: "row" },
+      el("button", { class: "small primary", onclick: (e) => busy(e.currentTarget, async () => {
+        await api("/api/import", { source: c.source, spotify_key: c.spotify_key });
+        toast(`Importé : ${c.spotify.display}`);
+        await scanDownloads();
+        if (state.data) await compare(false);
+      }) }, "Importer"),
+      el("button", { class: "small", onclick: (e) => busy(e.currentTarget, async () => {
+        await api("/api/ignore", { source: c.source });
+        await scanDownloads();
+      }) }, "Ignorer")))));
+
+  const pending = d.pending;
+  const box = $("dlPending");
+  box.classList.toggle("hidden", !pending.length);
+  if (pending.length) {
+    const st = d.settings;
+    box.replaceChildren(
+      el("div", {}, el("b", {}, `✅ ${pending.length} morceau${pending.length > 1 ? "x" : ""} prêt${pending.length > 1 ? "s" : ""} à importer dans Rekordbox`),
+        el("span", { class: "muted" }, ` (playlist « ${st.import_playlist} »)`)),
+      el("ul", { class: "notes" }, pending.map((p) => el("li", {}, p.spotify))),
+      el("details", {},
+        el("summary", {}, "Comment les importer dans Rekordbox"),
+        el("p", { class: "muted" }, "Réglage à faire une seule fois :"),
+        el("ol", { class: "howto" },
+          el("li", {}, "Rekordbox → Préférences → Avancé → Base de données → « Bibliothèque rekordbox xml » → Parcourir, et choisis ce fichier : ",
+            el("code", {}, st.import_xml), " ",
+            el("button", { class: "small", onclick: async () => { await copyText(st.import_xml); toast("Chemin copié"); } }, "Copier le chemin")),
+          el("li", {}, "Préférences → Affichage → Disposition : coche « rekordbox xml » pour l'afficher dans la barre latérale.")),
+        el("p", { class: "muted" }, "À chaque fois :"),
+        el("ol", { class: "howto" },
+          el("li", {}, "Dans la barre latérale : rekordbox xml → Listes de lecture (clique sur l'icône d'actualisation si besoin)."),
+          el("li", {}, `Clic droit sur « ${st.import_playlist} » → « Importer la liste de lecture ».`),
+          el("li", {}, "La playlist est créée ou complétée ; ses morceaux existants y sont déjà inclus, rien n'est perdu.")),
+        el("p", { class: "muted" }, "Les libellés peuvent varier légèrement selon ta version de Rekordbox.")));
+  }
+
+  const um = d.unmatched;
+  $("dlUnmatchedBox").classList.toggle("hidden", !um.length);
+  $("dlUnmatchedTitle").textContent = `${um.length} fichier${um.length > 1 ? "s" : ""} audio récent${um.length > 1 ? "s" : ""} non reconnu${um.length > 1 ? "s" : ""}`;
+  $("dlUnmatched").replaceChildren(...um.map((u) => el("div", { class: "dl-item" },
+    el("span", { class: "what" }, u.name),
+    el("button", { class: "small", onclick: (e) => busy(e.currentTarget, async () => {
+      await api("/api/ignore", { source: u.source });
+      await scanDownloads();
+    }) }, "Ignorer"))));
+}
+
+// Watch the Downloads folder while the page is open.
+setInterval(() => { if (document.visibilityState === "visible") scanDownloads(); }, 8000);
 
 // ---------- start ----------------------------------------------------------
 (async () => {

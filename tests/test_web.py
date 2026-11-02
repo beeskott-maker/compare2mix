@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from compare2mix import spotify, web
+from compare2mix import importer, spotify, web
 from compare2mix.decisions import DecisionStore
 from compare2mix.models import Track
 
@@ -67,9 +67,12 @@ def server(tmp_path, monkeypatch):
     monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
     FakeSpotify.logged_in = True
     cfg = tmp_path / "config.json"
-    cfg.write_text(json.dumps({"client_id": "abc"}))
+    cfg.write_text(json.dumps({"client_id": "abc",
+                               "downloads_dir": str(tmp_path / "Downloads"),
+                               "music_dir": str(tmp_path / "Music")}))
     app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "decisions.json"),
-                  spotify_factory=FakeSpotify)
+                  spotify_factory=FakeSpotify,
+                  imports=importer.ImportLog(tmp_path / "imports.json"))
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), web.make_handler(app))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{httpd.server_address[1]}"

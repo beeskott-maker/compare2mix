@@ -75,6 +75,27 @@ La bibliothèque utilisée la dernière fois est rechargée automatiquement. Apr
 XML depuis Rekordbox, clique sur la pastille « Rekordbox » puis sur **Charger**.
 Laisse le Terminal ouvert pendant l'utilisation (`Ctrl+C` pour arrêter).
 
+## Téléchargements → Rekordbox
+
+Quand l'interface web est ouverte, compare2mix surveille ton dossier **Téléchargements**
+(et ses sous-dossiers directs, ex. un album Bandcamp décompressé) :
+
+1. chaque nouveau fichier audio (MP3, WAV, AIFF, FLAC, M4A) est lu (tags, sinon nom du fichier)
+   et comparé aux morceaux **manquants** des playlists comparées ;
+2. correspondance sûre ✅ : le fichier est **déplacé** dans `~/Music/compare2mix/` et le morceau
+   passe en ✅ « téléchargé » ; correspondance douteuse 🟡 : bouton **Importer** / **Ignorer** ;
+3. compare2mix écrit `~/Music/compare2mix/rekordbox-import.xml`, qui contient la playlist
+   Rekordbox désignée (⚙ Réglages) avec **ses morceaux actuels + les nouveaux**.
+
+Dans Rekordbox (réglage à faire une fois) : Préférences → Avancé → Base de données →
+« Bibliothèque rekordbox xml » → choisir ce fichier, et Préférences → Affichage → Disposition →
+cocher « rekordbox xml ». Ensuite, à chaque fois : barre latérale → rekordbox xml → Listes de
+lecture → clic droit sur la playlist → **Importer la liste de lecture**.
+
+compare2mix n'écrit jamais dans la base de Rekordbox (`master.db`) : l'import XML est la voie
+officielle et sans risque pour ta collection. Les dossiers, la playlist cible et l'import
+automatique se règlent dans ⚙ Réglages.
+
 ## Options utiles
 
 | Option | Effet |
@@ -103,7 +124,7 @@ pytest
 ```
 
 Structure : `compare2mix/rekordbox.py` (lecture XML / master.db), `spotify.py` (API + CSV),
-`normalize.py`, `matcher.py`, `decisions.py` (choix manuels), `web.py` + `static/index.html`
+`normalize.py`, `matcher.py`, `decisions.py` (choix manuels), `importer.py` (téléchargements), `web.py` + `static/index.html`
 (interface), `report.py`, `cli.py`.
 
 ## Feuille de route
@@ -111,6 +132,7 @@ Structure : `compare2mix/rekordbox.py` (lecture XML / master.db), `spotify.py` (
 - [x] Moteur de comparaison + ligne de commande
 - [x] Interface web locale (choix de la playlist, validation manuelle des « probables »)
 - [x] Mémorisation des correspondances validées à la main
+- [x] Surveillance des téléchargements et import dans Rekordbox (via XML)
 - [ ] Comparer toutes les playlists d'un coup (liste d'achats unique)
 - [ ] Playlist Spotify « À acheter »
 - [ ] Comparaison avec une playlist Rekordbox précise plutôt que toute la collection

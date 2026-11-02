@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from .models import Track
 from .normalize import split_artists
@@ -66,6 +66,80 @@ def load_xml(path: str | os.PathLike) -> list[Track]:
             )
         )
     return tracks
+
+
+def load_xml_playlists(path: str | os.PathLike) -> dict[str, list[Track]]:
+    """Playlists of the XML export: name -> tracks (in playlist order).
+
+    Playlist entries reference the collection by TrackID (KeyType="0") or by
+    Location (KeyType="1"). Nested folders are flattened; when two playlists
+    share a name, the first one wins.
+    """
+    tracks = load_xml(path)
+    by_id = {t.source_id: t for t in tracks}
+    by_loc = {t.location: t for t in tracks if t.location}
+    root = ET.parse(path).getroot()
+    out: dict[str, list[Track]] = {}
+    for node in root.iter("NODE"):
+        if node.attrib.get("Type") != "1":
+            continue
+        name = node.attrib.get("Name", "")
+        if name in out:
+            continue
+        by_location = node.attrib.get("KeyType") == "1"
+        items = []
+        for t in node.findall("TRACK"):
+            key = t.attrib.get("Key", "")
+            track = by_loc.get(_location_to_path(key)) if by_location else by_id.get(key)
+            if track is not None:
+                items.append(track)
+        out[name] = items
+    return out
+
+
+def _path_to_location(path: str) -> str:
+    """'/Users/me/a b.mp3' -> 'file://localhost/Users/me/a%20b.mp3' (Rekordbox style)."""
+    return "file://localhost" + quote(os.path.abspath(path), safe="/:")
+
+
+def write_import_xml(path: str | os.PathLike, playlist_name: str,
+                     tracks: list[Track]) -> None:
+    """Write a Rekordbox XML holding one playlist with ``tracks``.
+
+    Meant to be set in Rekordbox as the "rekordbox xml" library, then imported
+    with "Importer la liste de lecture". Tracks already in the collection are
+    recognised by their file path and not duplicated.
+    """
+    root = ET.Element("DJ_PLAYLISTS", Version="1.0.0")
+    ET.SubElement(root, "PRODUCT", Name="compare2mix", Version="0.1.0", Company="")
+    collection = ET.SubElement(root, "COLLECTION", Entries=str(len(tracks)))
+    playlists = ET.SubElement(root, "PLAYLISTS")
+    root_node = ET.SubElement(playlists, "NODE", Type="0", Name="ROOT", Count="1")
+    node = ET.SubElement(root_node, "NODE", Name=playlist_name, Type="1", KeyType="0",
+                         Entries=str(len(tracks)))
+    for i, t in enumerate(tracks, start=1):
+        attrs = {
+            "TrackID": str(i),
+            "Name": t.title,
+            "Artist": t.artist_str,
+            "Location": _path_to_location(t.location or ""),
+        }
+        if t.album:
+            attrs["Album"] = t.album
+        if t.mix:
+            attrs["Mix"] = t.mix
+        if t.remixer:
+            attrs["Remixer"] = t.remixer
+        if t.duration_s:
+            attrs["TotalTime"] = str(int(round(t.duration_s)))
+        ET.SubElement(collection, "TRACK", **attrs)
+        ET.SubElement(node, "TRACK", Key=str(i))
+    ET.indent(root)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    ET.ElementTree(root).write(tmp, encoding="UTF-8", xml_declaration=True)
+    tmp.replace(path)
 
 
 def load_xml_playlist_names(path: str | os.PathLike) -> list[str]:

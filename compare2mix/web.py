@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
-from . import config, rekordbox, spotify
+from . import config, importer, rekordbox, spotify
 from .decisions import DecisionStore
 from .matcher import Matcher
 from .models import MatchResult, Status, Track
@@ -88,16 +88,24 @@ def result_json(r: MatchResult, decision: dict) -> dict:
 class App:
     def __init__(self, port: int = DEFAULT_PORT, config_path: Path | None = None,
                  decisions: DecisionStore | None = None,
-                 spotify_factory: Callable[[str, str], spotify.SpotifyClient] | None = None):
+                 spotify_factory: Callable[[str, str], spotify.SpotifyClient] | None = None,
+                 imports: importer.ImportLog | None = None):
         self.port = port
         self.config_path = config_path or config.CONFIG_FILE
         self.decisions = decisions or DecisionStore()
         self._spotify_factory = spotify_factory or (
             lambda cid, redirect: spotify.SpotifyClient(cid, redirect, interactive=False)
         )
+        self.imports = imports or importer.ImportLog()
         self.lock = threading.RLock()
+        self.scan_lock = threading.Lock()
         self.library_path: str | None = None
+        # Tracks of the Rekordbox export, and its playlists (name -> tracks).
+        self.collection: list[Track] = []
+        self.rb_playlists: dict[str, list[Track]] = {}
+        # What we match against: the collection + files imported since the export.
         self.library: list[Track] = []
+        self._file_cache: dict[tuple[str, float, int], Track] = {}
         self.isrc_count = 0
         self.read_tags = False
         self.loaded_at: float | None = None
@@ -128,18 +136,33 @@ class App:
         if not os.path.isfile(path):
             raise ApiError(f"Fichier introuvable : {path}", 404)
         tracks = rekordbox.load_xml(path)
+        playlists = rekordbox.load_xml_playlists(path)
         isrc = rekordbox.enrich_isrc_from_tags(tracks) if read_tags else 0
-        matcher = Matcher(tracks)
         with self.lock:
-            self.library_path, self.library, self.matcher = path, tracks, matcher
+            self.library_path, self.collection, self.rb_playlists = path, tracks, playlists
             self.isrc_count, self.read_tags, self.loaded_at = isrc, read_tags, time.time()
+            self._rebuild_library()
         config.update(self.config_path, library_path=os.path.abspath(path), read_tags=read_tags)
         return self.library_status()
+
+    def _collection_locations(self) -> set[str]:
+        return {t.location for t in self.collection if t.location}
+
+    def _pending_imports(self) -> list[importer.ImportedTrack]:
+        return self.imports.pending(self._collection_locations())
+
+    def _rebuild_library(self) -> None:
+        """Collection + imported files not yet in the export, then the import XML."""
+        with self.lock:
+            self.library = self.collection + [i.to_track() for i in self._pending_imports()]
+            self.matcher = Matcher(self.library)
+        self.write_import_xml()
 
     def library_status(self) -> dict:
         return {
             "path": self.library_path,
-            "count": len(self.library),
+            "count": len(self.collection),
+            "pending_import": len(self._pending_imports()),
             "isrc": self.isrc_count,
             "read_tags": self.read_tags,
             "loaded_at": self.loaded_at,
@@ -237,7 +260,7 @@ class App:
             raise ApiError("Charge d'abord ta bibliothèque Rekordbox.", 400, "no_library")
         pid = spotify.parse_playlist_id(playlist_id)
         entry = self._playlist(pid, refresh)
-        results = [self.decisions.resolve(self.matcher, t) for t in entry["tracks"]]
+        results = [self._resolve(t) for t in entry["tracks"]]
         counts = {s.name.lower(): 0 for s in Status}
         for r in results:
             counts[r.status.name.lower()] += 1
@@ -247,6 +270,15 @@ class App:
             "counts": counts,
             "results": [result_json(r, self.decisions.get(r.spotify.key)) for r in results],
         }
+
+    def _resolve(self, track: Track) -> MatchResult:
+        r = self.decisions.resolve(self.matcher, track)
+        if r.match is not None and r.match.location in self._imported_files():
+            r.method = "import"
+        return r
+
+    def _imported_files(self) -> set[str]:
+        return {i.file for i in self.imports.imported}
 
     def _find_spotify_track(self, key: str) -> Track:
         with self.lock:
@@ -266,8 +298,129 @@ class App:
             self.decisions.reset(spotify_key)
         else:
             raise ApiError(f"Action inconnue : {action}")
-        r = self.decisions.resolve(self.matcher, track)
-        return result_json(r, self.decisions.get(spotify_key))
+        return result_json(self._resolve(track), self.decisions.get(spotify_key))
+
+    # ---- downloads → Rekordbox ------------------------------------------------
+    def import_settings(self) -> dict:
+        s = self.settings
+        music_dir = s.get("music_dir") or str(importer.DEFAULT_MUSIC_DIR)
+        return {
+            "downloads_dir": s.get("downloads_dir") or str(importer.DEFAULT_DOWNLOADS),
+            "music_dir": music_dir,
+            "import_playlist": s.get("import_playlist") or "compare2mix",
+            "auto_import": s.get("auto_import", True),
+            "import_xml": str(Path(music_dir).expanduser() / "rekordbox-import.xml"),
+            "rekordbox_playlists": sorted(self.rb_playlists, key=str.lower),
+        }
+
+    def set_import_settings(self, body: dict) -> dict:
+        values = {}
+        for key in ("downloads_dir", "music_dir", "import_playlist"):
+            if body.get(key) is not None:
+                v = str(body[key]).strip()
+                if not v:
+                    raise ApiError("Valeur vide.")
+                values[key] = os.path.expanduser(v) if key != "import_playlist" else v
+        if "auto_import" in body:
+            values["auto_import"] = bool(body["auto_import"])
+        config.update(self.config_path, **values)
+        self.write_import_xml()
+        return self.import_settings()
+
+    def write_import_xml(self) -> str | None:
+        """(Re)write the XML Rekordbox imports: designated playlist = its current
+        tracks + imported files not yet in the collection."""
+        pending = self._pending_imports()
+        settings = self.import_settings()
+        if not pending and not Path(settings["import_xml"]).exists():
+            return None
+        name = settings["import_playlist"]
+        tracks: list[Track] = []
+        seen: set[str] = set()
+        for t in self.rb_playlists.get(name, []) + [i.to_track() for i in pending]:
+            if t.location and t.location not in seen:
+                seen.add(t.location)
+                tracks.append(t)
+        rekordbox.write_import_xml(settings["import_xml"], name, tracks)
+        return settings["import_xml"]
+
+    def missing_tracks(self) -> list[Track]:
+        """Missing tracks of every playlist compared during this session."""
+        out: dict[str, Track] = {}
+        with self.lock:
+            entries = list(self.playlists.values())
+        for entry in entries:
+            for t in entry["tracks"]:
+                if t.key not in out and self._resolve(t).status == Status.MISSING:
+                    out[t.key] = t
+        return list(out.values())
+
+    def _read_file(self, path: Path) -> Track:
+        st = path.stat()
+        key = (str(path), st.st_mtime, st.st_size)
+        if key not in self._file_cache:
+            self._file_cache[key] = importer.read_audio_track(path)
+        return self._file_cache[key]
+
+    def _import(self, file: Track, sp: Track) -> importer.ImportedTrack:
+        entry = self.imports.import_file(file, sp, self.import_settings()["music_dir"])
+        self.decisions.confirm(sp.key, Track(entry.title, entry.artists, location=entry.file).key)
+        self._rebuild_library()
+        return entry
+
+    def scan_downloads(self) -> dict:
+        settings = self.import_settings()
+        imported_now, to_confirm, unmatched = [], [], []
+        with self.scan_lock:
+            paths = [p for p in importer.scan_folder(settings["downloads_dir"])
+                     if not self.imports.is_known(str(p))]
+            files = [self._read_file(p) for p in paths]
+            missing = self.missing_tracks() if self.library else []
+            proposals = importer.propose(files, missing)
+            matched = set()
+            for prop in proposals:
+                matched.add(prop.file.location)
+                if prop.status == Status.FOUND and settings["auto_import"]:
+                    entry = self._import(prop.file, prop.spotify)
+                    imported_now.append(entry.spotify_display)
+                else:
+                    to_confirm.append({
+                        "source": prop.file.location,
+                        "name": Path(prop.file.location).name,
+                        "file": track_json(prop.file),
+                        "spotify": track_json(prop.spotify),
+                        "spotify_key": prop.spotify.key,
+                        "score": prop.result.score,
+                        "notes": prop.result.notes,
+                    })
+            week_ago = time.time() - 7 * 86400
+            for p in paths:
+                if str(p) not in matched and p.exists() and p.stat().st_mtime > week_ago:
+                    unmatched.append({"source": str(p), "name": p.name})
+        unmatched.sort(key=lambda u: u["name"].lower())
+        return {
+            "watching": settings["downloads_dir"],
+            "missing": len(missing),
+            "imported_now": imported_now,
+            "to_confirm": to_confirm,
+            "unmatched": unmatched[:30],
+            "pending": [{"file": i.file, "name": Path(i.file).name, "spotify": i.spotify_display}
+                        for i in self._pending_imports()],
+            "settings": settings,
+        }
+
+    def import_download(self, source: str, spotify_key: str) -> dict:
+        path = Path(source)
+        if not path.is_file():
+            raise ApiError(f"Fichier introuvable : {source}", 404)
+        if self.imports.is_known(source):
+            raise ApiError("Ce fichier a déjà été traité.")
+        with self.scan_lock:
+            entry = self._import(self._read_file(path), self._find_spotify_track(spotify_key))
+        return {"imported": entry.spotify_display}
+
+    def ignore_download(self, source: str) -> None:
+        self.imports.ignore(source)
 
     def search(self, query: str) -> list[dict]:
         return [track_json(t) for t in self.matcher.search(query, limit=12)]
@@ -275,7 +428,7 @@ class App:
     def export_csv(self, playlist_id: str) -> tuple[str, str]:
         pid = spotify.parse_playlist_id(playlist_id)
         entry = self._playlist(pid)
-        results = [self.decisions.resolve(self.matcher, t) for t in entry["tracks"]]
+        results = [self._resolve(t) for t in entry["tracks"]]
         buf = io.StringIO()
         write_csv_to(results, buf)
         safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in entry["name"]).strip()
@@ -376,6 +529,10 @@ def make_handler(app: App):
                 }))
             if path == "/api/playlists":
                 return self._run(lambda: self._json(app.list_playlists()))
+            if path == "/api/downloads":
+                return self._run(lambda: self._json(app.scan_downloads()))
+            if path == "/api/import-settings":
+                return self._run(lambda: self._json(app.import_settings()))
             if path == "/api/search":
                 return self._run(lambda: self._json(app.search(q.get("q", ""))))
             if path == "/api/export.csv":
@@ -397,6 +554,14 @@ def make_handler(app: App):
                 if path == "/api/library":
                     return self._json(app.load_library(body.get("path", ""),
                                                        bool(body.get("read_tags"))))
+                if path == "/api/import":
+                    return self._json(app.import_download(body.get("source", ""),
+                                                          body.get("spotify_key", "")))
+                if path == "/api/ignore":
+                    app.ignore_download(body.get("source", ""))
+                    return self._json({"ok": True})
+                if path == "/api/import-settings":
+                    return self._json(app.set_import_settings(body))
                 if path == "/api/default-playlist":
                     app.set_default_playlist(body.get("playlist", ""))
                     return self._json({"default_playlist": app.settings.get("default_playlist")})
