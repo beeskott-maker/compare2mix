@@ -7,13 +7,15 @@ from dataclasses import dataclass
 from rapidfuzz import fuzz, process
 
 from .models import MatchResult, Status, Track
-from .normalize import ParsedTitle, artist_key, fold, parse_title
+from .normalize import ParsedTitle, artist_key, fold, is_version_info, parse_title
 
 # Thresholds (0–100).
 FOUND_THRESHOLD = 90.0
 PROBABLE_THRESHOLD = 72.0
 DURATION_TOLERANCE_S = 3.0
-CANDIDATES = 25
+CANDIDATES = 40
+# Penalty when a library title was reinterpreted (artist name removed from it).
+VARIANT_PENALTY = 2.0
 
 
 @dataclass
@@ -22,11 +24,13 @@ class _Prepared:
     parsed: ParsedTitle
     artists: str  # folded artist tokens
     search_key: str
+    penalty: float = 0.0
 
 
-def _prepare(track: Track) -> _Prepared:
-    title = track.title
-    artists = list(track.artists)
+def _prepare(track: Track, title: str | None = None,
+             extra_artists: tuple[str, ...] = (), penalty: float = 0.0) -> _Prepared:
+    title = track.title if title is None else title
+    artists = list(track.artists) + list(extra_artists)
     # Untagged files are often named "Artist - Title" with no artist field.
     if not artists and " - " in title:
         maybe_artist, maybe_title = title.split(" - ", 1)
@@ -35,7 +39,41 @@ def _prepare(track: Track) -> _Prepared:
     if track.remixer and not parsed.significant:
         parsed.significant.append(fold(f"{track.remixer} remix"))
     akey = artist_key(artists, parsed.featured)
-    return _Prepared(track, parsed, akey, f"{akey} {parsed.base}".strip())
+    return _Prepared(track, parsed, akey, f"{akey} {parsed.base}".strip(), penalty)
+
+
+def _name_like(segment: str) -> bool:
+    """Could this title segment be an artist name rather than part of the title?"""
+    seg = segment.strip()
+    return bool(seg) and len(seg.split()) <= 6 and not is_version_info(seg)
+
+
+def _library_variants(track: Track) -> list[_Prepared]:
+    """Interpretations of a library track.
+
+    Library titles often carry the artist: "Nutcracker - X Remix - Blue Amazon"
+    or "Sidekick - Deep Fear (Remix)", sometimes with a label in the artist
+    field. Besides the literal reading, we try the title without its first
+    and/or last " - " segment, that segment being treated as an artist.
+    """
+    variants = [_prepare(track)]
+    segs = track.title.split(" - ")
+    if len(segs) < 2:
+        return variants
+    first, last = segs[0], segs[-1]
+    candidates = []
+    if _name_like(last):
+        candidates.append((" - ".join(segs[:-1]), (last,)))
+    if track.artists and _name_like(first):
+        candidates.append((" - ".join(segs[1:]), (first,)))
+    if len(segs) >= 3 and _name_like(first) and _name_like(last):
+        candidates.append((" - ".join(segs[1:-1]), (first, last)))
+    own = artist_key(list(track.artists))
+    for title, extra in candidates:
+        # No penalty when the removed name is already one of the track's artists.
+        known = own and all(fuzz.token_set_ratio(fold(e), own) >= 90 for e in extra)
+        variants.append(_prepare(track, title, extra, 0.0 if known else VARIANT_PENALTY))
+    return variants
 
 
 def _version_score(a: ParsedTitle, b: ParsedTitle) -> float:
@@ -59,7 +97,7 @@ def _score(sp: _Prepared, rb: _Prepared) -> tuple[float, dict[str, float]]:
     title = max(title, float(fuzz.token_set_ratio(sp.parsed.base, rb.parsed.base)) - 8)
     artist = _artist_score(sp.artists, rb.artists)
     version = _version_score(sp.parsed, rb.parsed)
-    total = 0.5 * title + 0.3 * artist + 0.2 * version
+    total = 0.5 * title + 0.3 * artist + 0.2 * version - rb.penalty
 
     d1, d2 = sp.track.duration_s, rb.track.duration_s
     if d1 and d2 and abs(d1 - d2) <= DURATION_TOLERANCE_S:
@@ -78,14 +116,18 @@ def _format_label(p: ParsedTitle) -> str:
 
 class Matcher:
     def __init__(self, library: list[Track]):
-        self.library = [_prepare(t) for t in library]
+        # One entry per interpretation of each track (see _library_variants).
+        self.library: list[_Prepared] = []
+        self._by_isrc: dict[str, list[_Prepared]] = {}
+        for track in library:
+            variants = _library_variants(track)
+            self.library.extend(variants)
+            if track.isrc:
+                self._by_isrc.setdefault(track.isrc.upper().strip(), []).append(variants[0])
         self._keys = [p.search_key for p in self.library]
         self._bases = [p.parsed.base for p in self.library]
-        self._by_isrc: dict[str, list[_Prepared]] = {}
         self._by_base: dict[str, list[int]] = {}
         for i, p in enumerate(self.library):
-            if p.track.isrc:
-                self._by_isrc.setdefault(p.track.isrc.upper().strip(), []).append(p)
             self._by_base.setdefault(p.parsed.base, []).append(i)
 
     def _candidates(self, sp: _Prepared) -> set[int]:
@@ -119,12 +161,14 @@ class Matcher:
         if not self.library:
             return MatchResult(track, Status.MISSING)
 
-        scored = []
+        best_per_track: dict[int, tuple[float, _Prepared]] = {}
         for idx in self._candidates(sp):
             rb = self.library[idx]
             total, _parts = _score(sp, rb)
-            scored.append((total, rb))
-        scored.sort(key=lambda x: x[0], reverse=True)
+            prev = best_per_track.get(id(rb.track))
+            if prev is None or total > prev[0]:
+                best_per_track[id(rb.track)] = (total, rb)
+        scored = sorted(best_per_track.values(), key=lambda x: x[0], reverse=True)
 
         best_score, best = scored[0]
         if best_score >= FOUND_THRESHOLD:

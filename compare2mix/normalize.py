@@ -64,6 +64,11 @@ def fold(text: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def is_version_info(text: str) -> bool:
+    """True when a title segment looks like version info ("Radio Edit", "X Remix")."""
+    return bool(_VERSION_KEYWORDS_RE.search(text.lower()) or _FORMAT_RE.match(fold(text)))
+
+
 def split_artists(text: str | None) -> list[str]:
     """Split a Rekordbox-style artist string ("A, B & C feat. D")."""
     if not text:
