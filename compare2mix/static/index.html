@@ -102,6 +102,8 @@
   .results { display: grid; gap: 6px; }
   .card { padding: 9px 12px; border-radius: 8px; background: var(--bg); border-left: 3px solid var(--muted); }
   .card.missing { border-left-color: var(--ko); }
+  .card.copied { opacity: .45; border-left-color: var(--muted); }
+  .card.copied .line1::after { content: "✓ lien copié"; font-size: 12px; color: var(--muted); }
   .card.probable { border-left-color: var(--warn); }
   .card.found { border-left-color: var(--ok); }
   .line1 { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
@@ -587,8 +589,17 @@ function render() {
     : [el("div", { class: "empty" }, state.text ? "Aucun résultat pour ce filtre." : "Rien dans cette catégorie.")]));
 }
 
+// Missing tracks whose Spotify link was copied: greyed out, remembered in this browser.
+const copiedLinks = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem("c2m.copied") || "[]")); } catch { return new Set(); }
+})();
+function rememberCopied(key) {
+  copiedLinks.add(key);
+  try { localStorage.setItem("c2m.copied", JSON.stringify([...copiedLinks])); } catch { /* private mode */ }
+}
+
 function card(r) {
-  const c = el("div", { class: "card " + r.status });
+  const c = el("div", { class: "card " + r.status + (r.status === "missing" && copiedLinks.has(r.key) ? " copied" : "") });
   // Click = copy the Spotify link ("Copier le lien vers le titre"); Cmd/Ctrl+click opens it.
   const spTitle = r.spotify.url
     ? el("a", {
@@ -597,7 +608,11 @@ function card(r) {
         onclick: async (e) => {
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
-          try { await copyText(r.spotify.url); toast("Lien Spotify copié"); }
+          try {
+            await copyText(r.spotify.url);
+            toast("Lien Spotify copié");
+            if (r.status === "missing") { rememberCopied(r.key); c.classList.add("copied"); }
+          }
           catch (err) { toast(err.message, true); }
         },
       }, r.spotify.display)
