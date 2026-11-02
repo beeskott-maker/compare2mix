@@ -178,3 +178,12 @@ def test_decisions_persist(tmp_path):
     store.reject("spotify:track:1", "file:/b.mp3")
     again = DecisionStore(tmp_path / "d.json")
     assert again.get("spotify:track:1") == {"confirmed": "file:/a.mp3", "rejected": ["file:/b.mp3"]}
+
+
+def test_default_playlist(server):
+    base, _ = server
+    assert call(base, "/api/status")["default_playlist"] is None
+    r = call(base, "/api/default-playlist",
+             {"playlist": "https://open.spotify.com/playlist/0Zarq4BVkFkZOWkmqsfrjA?si=x"})
+    assert r["default_playlist"] == "0Zarq4BVkFkZOWkmqsfrjA"
+    assert call(base, "/api/status")["default_playlist"] == "0Zarq4BVkFkZOWkmqsfrjA"

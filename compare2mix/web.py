@@ -177,6 +177,9 @@ class App:
                     pass
         return out
 
+    def set_default_playlist(self, playlist_id: str) -> None:
+        config.update(self.config_path, default_playlist=spotify.parse_playlist_id(playlist_id))
+
     def set_client_id(self, client_id: str) -> None:
         client_id = client_id.strip()
         if not client_id:
@@ -369,6 +372,7 @@ def make_handler(app: App):
                     "library": app.library_status(),
                     "spotify": app.spotify_status(),
                     "default_library": app.settings.get("library_path") or str(DEFAULT_LIBRARY),
+                    "default_playlist": app.settings.get("default_playlist"),
                 }))
             if path == "/api/playlists":
                 return self._run(lambda: self._json(app.list_playlists()))
@@ -393,6 +397,9 @@ def make_handler(app: App):
                 if path == "/api/library":
                     return self._json(app.load_library(body.get("path", ""),
                                                        bool(body.get("read_tags"))))
+                if path == "/api/default-playlist":
+                    app.set_default_playlist(body.get("playlist", ""))
+                    return self._json({"default_playlist": app.settings.get("default_playlist")})
                 if path == "/api/client-id":
                     app.set_client_id(body.get("client_id", ""))
                     return self._json(app.spotify_status())

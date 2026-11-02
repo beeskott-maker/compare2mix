@@ -140,6 +140,7 @@
     <h2>Playlist à comparer</h2>
     <div class="row">
       <select id="plSelect"><option>Chargement des playlists…</option></select>
+      <button id="defaultBtn" title="Ouvrir et comparer cette playlist au lancement">☆ Par défaut</button>
       <button class="primary" id="compareBtn">Comparer</button>
       <button id="refreshBtn" title="Relire la playlist sur Spotify">Actualiser</button>
       <button id="exportBtn" disabled>Exporter CSV</button>
@@ -218,10 +219,6 @@ async function busy(btn, fn) {
   finally { btn.disabled = false; btn.innerHTML = label; }
 }
 const mmss = (s) => s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : "";
-const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
-};
 
 // ---------- status ---------------------------------------------------------
 function setPill(id, ok, text) {
@@ -250,8 +247,34 @@ async function refreshStatus() {
   const ready = sp.logged_in && lib.count > 0;
   $("plPanel").classList.toggle("hidden", !sp.logged_in);
   $("compareBtn").disabled = !ready;
-  if (sp.logged_in && !state.playlists.length) loadPlaylists();
+  if (sp.logged_in && !state.playlists.length) {
+    await loadPlaylists();
+    // Compare the default playlist straight away when everything is ready.
+    if (ready && !state.data && $("plSelect").value) compare(false);
+  }
 }
+
+// Default playlist: the one chosen with "★ Par défaut", else the one named
+// "À mixer", else the first readable one.
+const fold = (t) => (t || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+function defaultPlaylistId(mine) {
+  const chosen = state.status && state.status.default_playlist;
+  if (chosen && mine.some((p) => p.id === chosen)) return chosen;
+  const aMixer = mine.find((p) => fold(p.name) === "a mixer");
+  return aMixer ? aMixer.id : (mine[0] && mine[0].id);
+}
+function updateDefaultBtn() {
+  const sel = $("plSelect").value;
+  const current = (state.status && state.status.default_playlist) || defaultPlaylistId(state.playlists.filter((p) => p.readable));
+  const isDefault = sel && sel === current;
+  $("defaultBtn").textContent = isDefault ? "★ Par défaut" : "☆ Par défaut";
+  $("defaultBtn").disabled = isDefault;
+}
+$("defaultBtn").addEventListener("click", (e) => busy(e.currentTarget, async () => {
+  const r = await api("/api/default-playlist", { playlist: $("plSelect").value });
+  state.status.default_playlist = r.default_playlist;
+  toast("Playlist ouverte par défaut au lancement");
+}).then(updateDefaultBtn));
 
 // ---------- library / spotify setup ----------------------------------------
 $("libPill").addEventListener("click", () => {
@@ -289,15 +312,18 @@ async function loadPlaylists() {
       `${p.name} (${p.tracks ?? "?"})` + (disabled ? ` – par ${p.owner}` : ""))));
   sel.append(group("Mes playlists", mine, false));
   if (others.length) sel.append(group("Abonnements (à dupliquer dans Spotify pour les comparer)", others, true));
-  const last = store.get("playlist");
-  if (last && mine.some((p) => p.id === last)) sel.value = last;
+  const def = defaultPlaylistId(mine);
+  if (def) sel.value = def;
+  updateDefaultBtn();
 }
-$("plSelect").addEventListener("change", () => store.set("playlist", $("plSelect").value));
+$("plSelect").addEventListener("change", () => {
+  updateDefaultBtn();
+  compare(false);
+});
 
 async function compare(refresh) {
   const id = $("plSelect").value;
   if (!id) return;
-  store.set("playlist", id);
   const btn = refresh ? $("refreshBtn") : $("compareBtn");
   await busy(btn, async () => {
     state.data = await api("/api/compare", { playlist: id, refresh });

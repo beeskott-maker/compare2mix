@@ -61,6 +61,8 @@ compare2mix web
 
 La page s'ouvre dans le navigateur sur <http://127.0.0.1:8888/> (elle ne tourne que sur ton Mac) :
 
+- au lancement, la playlist par défaut (« À mixer », ou celle marquée **★ Par défaut**) est
+  sélectionnée et comparée automatiquement ; changer de playlist relance la comparaison ;
 - choix de la playlist dans la liste (les abonnements non lisibles sont grisés) ;
 - résultats triés : ❌ manquants, 🟡 à vérifier, ✅ trouvés, avec filtre texte ;
 - corrections d'un clic : **C'est bien lui** / **Ce n'est pas lui** / **Je l'ai, le chercher…**
