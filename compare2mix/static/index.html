@@ -10,7 +10,7 @@
     --bg: #f5f6f3; --panel: #ffffff; --fg: #1c1d1b; --muted: #676a64; --line: #e1e3dd;
     --accent: #1c9c4a; --accent-ink: #ffffff; --accent-soft: #e5f4ea;
     --ok: #1c8a45; --warn: #a96f00; --ko: #c43d3d;
-    --ok-bg: #e5f4ea; --warn-bg: #fbf1d8; --ko-bg: #f9e6e6; --chip: #eceee9;
+    --orange: #c25e00; --ok-bg: #e5f4ea; --warn-bg: #fbf1d8; --ko-bg: #f9e6e6; --chip: #eceee9;
     --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
@@ -133,6 +133,7 @@
   .status { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .status.found { background: var(--ok-bg); color: var(--ok); }
   .status.probable { background: var(--warn-bg); color: var(--warn); }
+  .status.check { background: var(--orange); color: #ffffff; }
   details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
   details[open] summary { margin-bottom: 8px; }
   .dest { background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
@@ -724,8 +725,8 @@ function renderRecap() {
         el("td", {}, m.spotify, dur(m.durations && m.durations.spotify)),
         el("td", { class: "eq", "aria-hidden": "true" }, "="),
         el("td", { class: "file" }, m.new_name || m.name, dur(m.durations && m.durations.file)),
-        el("td", {}, el("span", { class: "status " + m.status },
-          m.status === "found" ? `✅ sûr · ${Math.round(m.score)}` : `🟡 à vérifier · ${Math.round(m.score)}`),
+        el("td", {}, el("span", { class: m.status === "found" ? "status found" : "status check" },
+          m.status === "found" ? "✅ sûr" : "à vérifier"),
           m.notes.length ? el("div", { class: "note" }, m.notes.join(" · ")) : null));
     });
     parts.push(el("div", { class: "tablewrap" }, el("table", {},

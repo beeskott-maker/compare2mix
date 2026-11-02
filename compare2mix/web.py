@@ -629,10 +629,9 @@ def _mmss(seconds: float) -> str:
     return f"{seconds // 60}:{seconds % 60:02d}"
 
 
-def _durations_if_different(file_s: float | None, spotify_s: float | None,
-                            tolerance_s: float = 30) -> dict | None:
+def _durations_if_different(file_s: float | None, spotify_s: float | None) -> dict | None:
     """{"file": "9:46", "spotify": "4:26"} when both are known and differ."""
-    if not file_s or not spotify_s or abs(file_s - spotify_s) <= tolerance_s:
+    if not importer.durations_differ(file_s, spotify_s):
         return None
     return {"file": _mmss(file_s), "spotify": _mmss(spotify_s)}
 

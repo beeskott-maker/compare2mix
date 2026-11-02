@@ -22,7 +22,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .matcher import Matcher
+from .matcher import FOUND_THRESHOLD, Matcher
 from .models import MatchResult, Status, Track
 from .normalize import split_artists
 
@@ -277,6 +277,22 @@ class Proposal:
         return self.result.status
 
 
+DURATION_TOLERANCE_S = 30
+
+
+def durations_differ(a: float | None, b: float | None) -> bool:
+    return bool(a and b and abs(a - b) > DURATION_TOLERANCE_S)
+
+
+def _downgrade_if_duration_differs(r) -> None:
+    """A downloaded file whose length differs from Spotify's is never "sure":
+    it may be another version (extended, radio edit…) or another track."""
+    if durations_differ(r.match.duration_s, r.spotify.duration_s):
+        r.score = min(r.score, FOUND_THRESHOLD - 10)
+        if r.status == Status.FOUND:
+            r.status = Status.PROBABLE
+
+
 def propose(files: list[Track], missing: list[Track]) -> list[Proposal]:
     """Pair downloaded files with missing Spotify tracks.
 
@@ -290,6 +306,7 @@ def propose(files: list[Track], missing: list[Track]) -> list[Proposal]:
     for sp in missing:
         r = matcher.match(sp)
         if r.match is not None and r.status != Status.MISSING:
+            _downgrade_if_duration_differs(r)
             candidates.append(Proposal(r.match, sp, r))
     candidates.sort(key=lambda p: p.result.score, reverse=True)
     used_files: set[str] = set()

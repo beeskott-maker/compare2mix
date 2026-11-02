@@ -169,7 +169,8 @@ def env(tmp_path, monkeypatch):
 
 def test_recap_then_transfer_then_xml(env):
     tmp, app, call = env
-    make_wav(tmp / "Downloads" / "whatever.wav", title="Some Unknown Track", artist="Nobody")
+    make_wav(tmp / "Downloads" / "whatever.wav", title="Some Unknown Track", artist="Nobody",
+             seconds=300)  # same length as on Spotify (5:00)
     make_wav(tmp / "Downloads" / "Random Artist - Random Song.wav")
     pid = "1xZn2Qs4ytrn5EfOGJDxft"
 
@@ -361,3 +362,12 @@ def test_durations_only_when_different():
     assert web._durations_if_different(586, 266) == {"file": "9:46", "spotify": "4:26"}
     assert web._durations_if_different(280, 266) is None  # within 30 s
     assert web._durations_if_different(None, 266) is None
+
+
+def test_duration_difference_downgrades_to_check():
+    sp = Track("Sunsleeper", ["Barry Can't Swim"], duration_s=266, source_id="spotify:track:s")
+    same = Track("Sunsleeper", ["Barry Can't Swim"], duration_s=270, location="/d/a.mp3")
+    longer = Track("Sunsleeper", ["Barry Can't Swim"], duration_s=586, location="/d/b.mp3")
+    assert importer.propose([same], [sp])[0].status == Status.FOUND
+    p = importer.propose([longer], [sp])[0]
+    assert p.status == Status.PROBABLE and p.result.score < 90
