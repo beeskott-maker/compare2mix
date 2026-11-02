@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Compare une playlist Spotify avec une bibliothèque Rekordbox"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["rapidfuzz>=3.0"]
+dependencies = ["rapidfuzz>=3.0", "certifi"]
 
 [project.optional-dependencies]
 tags = ["mutagen>=1.47"]

@@ -23,6 +23,7 @@ import json
 import os
 import re
 import secrets
+import ssl
 import threading
 import time
 import urllib.error
@@ -174,6 +175,42 @@ def _parse_duration(text: str) -> float | None:
 # OAuth PKCE + HTTP
 # --------------------------------------------------------------------------
 
+_ssl_context: ssl.SSLContext | None = None
+
+
+def ssl_context() -> ssl.SSLContext:
+    """TLS context using certifi's CA bundle when available.
+
+    The python.org installer for macOS does not set up the system certificates
+    (hence CERTIFICATE_VERIFY_FAILED); certifi provides them. Verification is
+    always on.
+    """
+    global _ssl_context
+    if _ssl_context is None:
+        try:
+            import certifi  # type: ignore
+
+            _ssl_context = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:  # pragma: no cover
+            _ssl_context = ssl.create_default_context()
+    return _ssl_context
+
+
+def _urlopen(req: urllib.request.Request):
+    try:
+        return urllib.request.urlopen(req, timeout=30, context=ssl_context())
+    except urllib.error.HTTPError:
+        raise
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, ssl.SSLCertVerificationError):
+            raise SpotifyError(
+                "Impossible de vérifier le certificat HTTPS de Spotify. Lance "
+                "« pip install -U certifi » dans le dossier du projet, ou double-clique sur "
+                "« Install Certificates.command » dans /Applications/Python 3.x/."
+            ) from e
+        raise SpotifyError(f"Connexion à Spotify impossible : {e.reason}") from e
+
+
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
@@ -184,7 +221,7 @@ def _post_form(url: str, data: dict) -> dict:
         url, data=body, headers={"Content-Type": "application/x-www-form-urlencoded"}
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with _urlopen(req) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as e:
         raise SpotifyError(f"Échec d'authentification Spotify ({e.code}) : {e.read().decode()}")
@@ -303,7 +340,7 @@ class SpotifyClient:
                 url, headers={"Authorization": f"Bearer {self.access_token()}"}
             )
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
+                with _urlopen(req) as resp:
                     return json.load(resp)
             except urllib.error.HTTPError as e:
                 if e.code == 429:
