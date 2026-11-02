@@ -231,6 +231,36 @@ def _tag_value(tags, field_name: str) -> str | None:
     return None
 
 
+def write_tags(path: str | os.PathLike, genre: str | None = None,
+               title: str | None = None, artists: list[str] | None = None) -> None:
+    """Write the genre (replacing any existing one) and, when given, the title
+    and artists into the file's tags, so Rekordbox shows them. Needs mutagen."""
+    import mutagen  # type: ignore
+    from mutagen.id3 import ID3, TCON, TIT2, TPE1  # type: ignore
+    from mutagen.mp4 import MP4Tags  # type: ignore
+
+    audio = mutagen.File(path)
+    if audio is None:
+        raise ValueError("format de fichier non reconnu")
+    if audio.tags is None:
+        audio.add_tags()
+    tags = audio.tags
+    artist = ", ".join(artists) if artists else None
+    if isinstance(tags, ID3):  # MP3, WAV, AIFF
+        for frame, value in ((TCON, genre), (TIT2, title), (TPE1, artist)):
+            if value:
+                tags.setall(frame.__name__, [frame(encoding=3, text=[value])])
+    elif isinstance(tags, MP4Tags):  # M4A / AAC
+        for k, value in (("\xa9gen", genre), ("\xa9nam", title), ("\xa9ART", artist)):
+            if value:
+                tags[k] = [value]
+    else:  # FLAC / Ogg (Vorbis comments)
+        for k, value in (("genre", genre), ("title", title), ("artist", artist)):
+            if value:
+                tags[k] = [value]
+    audio.save()
+
+
 def read_audio_track(path: str | os.PathLike) -> Track:
     """Track from the file's tags (needs mutagen), falling back to its name."""
     path = Path(path)

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from mutagen.wave import WAVE
-from mutagen.id3 import TIT2, TPE1, TSRC
+from mutagen.id3 import TCON, TIT2, TPE1, TSRC
 
 from compare2mix import importer, web
 from compare2mix.decisions import DecisionStore
@@ -175,12 +175,14 @@ def test_recap_then_transfer(env):
 
     # Step 5: transfer the chosen file, then build the XML.
     m = r["matches"][0]
-    res = call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"]})
+    res = call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"],
+                               "genre": "Acid House / Techno"})
     moved = tmp / "Music" / "Nobody - Some Unknown Track.wav"
     assert m["new_name"] == moved.name
     assert "durations" in m and not any(n.startswith("durée") for n in m["notes"])
     assert res == {"imported": "Nobody – Some Unknown Track", "file": str(moved),
-                   "renamed": False}
+                   "renamed": False, "genre": "Acid House / Techno", "tags_error": None}
+    assert WAVE(moved).tags["TCON"].text == ["Acid House / Techno"]
     assert moved.exists() and not (tmp / "Downloads" / "whatever.wav").exists()
     assert call("/api/transfer-done", {}) == {"export_archived": None}  # XML given by hand
 
@@ -356,3 +358,58 @@ def test_is_known_only_while_the_import_is_real(tmp_path):
     assert not log.is_known(str(src))  # downloaded again since: a new file
     log.ignore(str(tmp_path / "x.wav"))
     assert not log.is_known(str(tmp_path / "x.wav"))  # old "ignored" list unused
+
+# ---- genre (Discogs) and tags -----------------------------------------------
+
+def test_pick_genre_keeps_most_frequent_styles():
+    from compare2mix.discogs import pick_genre
+    results = [{"genre": ["Electronic"], "style": ["Techno", "Acid"]},
+               {"genre": ["Electronic"], "style": ["Acid House", "Techno", "Acid"]},
+               {"genre": ["Electronic"], "style": ["Acid House", "Techno"]}]
+    assert pick_genre(results)["genre"] == "Techno / Acid"
+    assert pick_genre([{"genre": ["Electronic"], "style": []}])["genre"] == "Electronic"
+    assert pick_genre([])["genre"] is None
+
+
+def test_discogs_lookup_falls_back_and_caches(tmp_path, monkeypatch):
+    from compare2mix import discogs
+    monkeypatch.setattr(discogs.time, "sleep", lambda s: None)
+    calls = []
+
+    def fetch(url, params):
+        calls.append(params)
+        if "artist" in params:  # nothing under the exact artist spelling
+            return {"results": []}
+        return {"results": [{"genre": ["Electronic"], "style": ["Acid", "Techno"]}]}
+
+    sp = Track("Make Regal Great Again", ["ACIDBOY", "Regal"], source_id="spotify:track:r")
+    d = discogs.Discogs(None, cache_path=tmp_path / "g.json", fetch=fetch)
+    assert d.genre_for(sp)["genre"] == "Acid / Techno"
+    assert d.genre_for(sp)["genre"] == "Acid / Techno"  # cached
+    assert [c.get("artist") or c.get("q") for c in calls] == \
+        ["ACIDBOY", "ACIDBOY make regal great again"]
+    again = discogs.Discogs(None, cache_path=tmp_path / "g.json", fetch=fetch)
+    assert again.genre_for(sp)["genre"] == "Acid / Techno" and len(calls) == 2
+
+
+def test_write_tags_replaces_genre_and_fills_untagged(tmp_path):
+    f = make_wav(tmp_path / "x.wav", title="Old", artist="Someone")
+    audio = WAVE(f)
+    audio.tags.add(TCON(encoding=3, text=["Pop"]))
+    audio.save()
+    importer.write_tags(f, genre="Deep House")
+    t = WAVE(f).tags
+    assert t["TCON"].text == ["Deep House"] and t["TIT2"].text == ["Old"]
+    bare = make_wav(tmp_path / "bare.wav")
+    importer.write_tags(bare, genre="Trance", title="Sunsleeper", artists=["Barry Can't Swim"])
+    t = WAVE(bare).tags
+    assert (t["TCON"].text, t["TIT2"].text, t["TPE1"].text) == \
+        (["Trance"], ["Sunsleeper"], ["Barry Can't Swim"])
+    assert importer.read_audio_track(bare).artists == ["Barry Can't Swim"]
+
+
+def test_genre_endpoint(env):
+    tmp, app, call = env
+    app._discogs_factory = lambda token: type("D", (), {
+        "genre_for": staticmethod(lambda t: {"genre": "House", "styles": ["House"], "releases": 3})})()
+    assert call("/api/genre?spotify_key=spotify:track:9")["genre"] == "House"

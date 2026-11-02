@@ -74,7 +74,9 @@ en 5 étapes :
    (« 2 / 37 manquants retrouvés »), avec une case par fichier (✅ sûr, 🟡 à vérifier), les fichiers
    non reconnus, les morceaux toujours manquants et la destination. Chaque fichier est renommé
    « ARTISTE - TITRE.ext » d'après ses tags (ou d'après Spotify s'il n'en a pas), sauf s'il porte
-   déjà ce nom ; le nouveau nom est affiché ici. **Rien n'est déplacé ici.**
+   déjà ce nom ; le nouveau nom est affiché ici. La colonne **Genre** est remplie depuis
+   [Discogs](https://www.discogs.com) (les deux styles les plus fréquents parmi les disques qui
+   contiennent le morceau, ex. « Techno / Acid ») et reste modifiable. **Rien n'est déplacé ici.**
 5. **Copie** : « Lancer la copie » déplace les fichiers cochés vers la clé avec une barre de
    progression. Il reste à les glisser depuis le Finder sur ta playlist dans Rekordbox. L'export
    Rekordbox lu dans Téléchargements est alors renommé « … (traité).xml » : il ne sera plus relu
@@ -85,7 +87,13 @@ clé USB (restés sur le Mac, liens Apple Music…) et, clé branchée, ceux don
 plus.
 
 Le lien **Réglages** (en haut) permet de changer le dossier Téléchargements, le dossier de
-rangement sur la clé (avec suggestion) et copier au lieu de déplacer.
+rangement sur la clé (avec suggestion), copier au lieu de déplacer, et un jeton Discogs
+(facultatif : discogs.com → Paramètres → Développeurs → « Generate new token » ; il fait passer la
+limite de 25 à 60 recherches par minute).
+
+À la copie, le genre est écrit dans le tag Genre du fichier (il remplace celui qui s'y trouvait),
+et un fichier sans tags reçoit le titre et les artistes Spotify : Rekordbox les lit quand tu
+ajoutes le morceau.
 
 compare2mix n'écrit jamais dans Rekordbox : il range les fichiers, tu les ajoutes toi-même. Si la
 clé n'est pas branchée, rien n'est écrit (pas de faux dossier sur le disque du Mac) : branche-la
@@ -128,6 +136,8 @@ Structure : `compare2mix/rekordbox.py` (lecture XML / master.db), `spotify.py` (
 - [x] Interface web locale (choix de la playlist, validation manuelle des « probables »)
 - [x] Mémorisation des correspondances validées à la main
 - [x] Récupération des fichiers téléchargés, renommés et rangés sur la clé
+- [x] Genre détaillé depuis Discogs, écrit dans les tags
+- [ ] Niveau d'énergie (analyse audio locale)
 - [ ] Comparer toutes les playlists d'un coup (liste d'achats unique)
 - [ ] Playlist Spotify « À acheter »
 - [ ] Comparaison avec une playlist Rekordbox précise plutôt que toute la collection

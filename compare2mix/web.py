@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
-from . import config, importer, rekordbox, spotify
+from . import config, discogs, importer, rekordbox, spotify
 from .decisions import DecisionStore
 from .matcher import Matcher
 from .models import MatchResult, Status, Track
@@ -90,7 +90,8 @@ class App:
     def __init__(self, port: int = DEFAULT_PORT, config_path: Path | None = None,
                  decisions: DecisionStore | None = None,
                  spotify_factory: Callable[[str, str], spotify.SpotifyClient] | None = None,
-                 imports: importer.ImportLog | None = None):
+                 imports: importer.ImportLog | None = None,
+                 discogs_factory: Callable[[str | None], discogs.Discogs] | None = None):
         self.port = port
         self.config_path = config_path or config.CONFIG_FILE
         self.decisions = decisions or DecisionStore()
@@ -98,6 +99,9 @@ class App:
             lambda cid, redirect: spotify.SpotifyClient(cid, redirect, interactive=False)
         )
         self.imports = imports or importer.ImportLog()
+        self._discogs_factory = discogs_factory or (lambda token: discogs.Discogs(token))
+        self._discogs: discogs.Discogs | None = None
+        self._discogs_token: str | None = None
         self.lock = threading.RLock()
         self.scan_lock = threading.Lock()
         self.library_lock = threading.Lock()
@@ -410,6 +414,8 @@ class App:
             "music_dir_available": importer.is_available(music_dir),
             "music_volume": importer.volume_root(music_dir),
             "keep_original": bool(s.get("keep_original", False)),
+            # The token itself stays on disk: only say whether there is one.
+            "discogs_token_set": bool(s.get("discogs_token")),
             "suggested_music_dirs": self._suggested_music_dirs(),
         }
 
@@ -435,6 +441,8 @@ class App:
         for key in ("keep_original",):
             if key in body:
                 values[key] = bool(body[key])
+        if body.get("discogs_token") is not None:  # "" = forget it
+            values["discogs_token"] = str(body["discogs_token"]).strip()
         config.update(self.config_path, **values)
         return self.import_settings()
 
@@ -539,7 +547,21 @@ class App:
             config.update(self.config_path, library_source=f"{dest}|archived")
         return dest.name
 
-    def import_download(self, source: str, spotify_key: str) -> dict:
+    def _discogs_client(self) -> discogs.Discogs:
+        token = self.settings.get("discogs_token") or None
+        if self._discogs is None or token != self._discogs_token:
+            self._discogs, self._discogs_token = self._discogs_factory(token), token
+        return self._discogs
+
+    def genre(self, spotify_key: str) -> dict:
+        """Step 4: detailed genre of a missing track, from Discogs."""
+        track = self._find_spotify_track(spotify_key)
+        try:
+            return self._discogs_client().genre_for(track)
+        except discogs.DiscogsError as e:
+            raise ApiError(str(e), 502, "discogs") from e
+
+    def import_download(self, source: str, spotify_key: str, genre: str | None = None) -> dict:
         path = Path(source)
         if not path.is_file():
             raise ApiError(f"Fichier introuvable : {source}", 404)
@@ -549,9 +571,22 @@ class App:
             file, sp = self._read_file(path), self._find_spotify_track(spotify_key)
             wanted = importer.target_name(file, sp, path.suffix.lower())
             entry = self._import(file, sp)
+        # Genre chosen in step 4 (replaces the file's own); a file without tags
+        # also gets the Spotify title and artists, so Rekordbox shows them.
+        genre = (genre or "").strip() or None
+        untagged = not file.artists
+        tags_error = None
+        if genre or untagged:
+            try:
+                importer.write_tags(entry.file, genre=genre,
+                                    title=entry.title if untagged else None,
+                                    artists=entry.artists if untagged else None)
+            except Exception as e:  # the file is filed anyway
+                tags_error = f"tags non écrits ({e})"
         # "renamed": a file with the same name was already there, so "(2)" was added.
         return {"imported": entry.spotify_display, "file": entry.file,
-                "renamed": Path(entry.file).name != wanted}
+                "renamed": Path(entry.file).name != wanted, "genre": genre,
+                "tags_error": tags_error}
 
     def search(self, query: str) -> list[dict]:
         return [track_json(t) for t in self.matcher.search(query, limit=12)]
@@ -676,6 +711,8 @@ def make_handler(app: App):
                 return self._run(lambda: self._json(app.recap(q.get("playlist", ""))))
             if path == "/api/import-settings":
                 return self._run(lambda: self._json(app.import_settings()))
+            if path == "/api/genre":
+                return self._run(lambda: self._json(app.genre(q.get("spotify_key", ""))))
             if path == "/api/search":
                 return self._run(lambda: self._json(app.search(q.get("q", ""))))
             if path == "/api/export.csv":
@@ -712,7 +749,8 @@ def make_handler(app: App):
                     return self._json(app.transfer_done())
                 if path == "/api/import":
                     return self._json(app.import_download(body.get("source", ""),
-                                                          body.get("spotify_key", "")))
+                                                          body.get("spotify_key", ""),
+                                                          body.get("genre")))
                 if path == "/api/import-settings":
                     return self._json(app.set_import_settings(body))
                 if path == "/api/default-playlist":
