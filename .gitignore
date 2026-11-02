@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+# Données personnelles : exports Rekordbox, résultats, jetons
+data/
+*.results.csv
+resultats*.csv
+.compare2mix/

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compare2mix"
+version = "0.1.0"
+description = "Compare une playlist Spotify avec une bibliothèque Rekordbox"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["rapidfuzz>=3.0"]
+
+[project.optional-dependencies]
+tags = ["mutagen>=1.47"]
+db = ["pyrekordbox>=0.3"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+compare2mix = "compare2mix.cli:main"
+
+[tool.setuptools]
+packages = ["compare2mix"]

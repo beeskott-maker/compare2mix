@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS Version="1.0.0">
+  <PRODUCT Name="rekordbox" Version="7.1.0" Company="AlphaTheta"/>
+  <COLLECTION Entries="8">
+    <TRACK TrackID="1" Name="Strobe" Artist="Deadmau5" Album="For Lack of a Better Name" Mix="Original Mix" Remixer="" Kind="MP3 File" TotalTime="637" AverageBpm="128.00" Location="file://localhost/Users/dj/Music/Deadmau5%20-%20Strobe.mp3">
+      <TEMPO Inizio="0.025" Bpm="128.00" Metro="4/4" Battito="1"/>
+    </TRACK>
+    <TRACK TrackID="2" Name="Losing It" Artist="FISHER" Mix="" TotalTime="372" Location="file://localhost/Users/dj/Music/Fisher%20-%20Losing%20It.mp3"/>
+    <TRACK TrackID="3" Name="Cola (Camelphat &amp; Elderbrook Edit)" Artist="CamelPhat, Elderbrook" TotalTime="400" Location="file://localhost/Users/dj/Music/cola.aiff"/>
+    <TRACK TrackID="4" Name="Café del Mar" Artist="Energy 52" Mix="Three 'N One Remix" TotalTime="590" Location=""/>
+    <TRACK TrackID="5" Name="Opus (Extended Mix)" Artist="Eric Prydz" TotalTime="543" Location=""/>
+    <TRACK TrackID="6" Name="Innerbloom" Artist="RÜFÜS DU SOL" TotalTime="578" Location=""/>
+    <TRACK TrackID="7" Name="Daft Punk - Around The World" Artist="" TotalTime="429" Location=""/>
+    <TRACK TrackID="8" Name="Breathe" Artist="Fred again.., Kieran Hebden" TotalTime="200" Location=""/>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="1">
+      <NODE Name="Warm up" Type="1" KeyType="0" Entries="2">
+        <TRACK Key="1"/>
+        <TRACK Key="2"/>
+      </NODE>
+    </NODE>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>
