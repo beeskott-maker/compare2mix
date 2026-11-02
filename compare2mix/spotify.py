@@ -47,6 +47,10 @@ class SpotifyError(RuntimeError):
     pass
 
 
+class NotLoggedIn(SpotifyError):
+    pass
+
+
 # --------------------------------------------------------------------------
 # Parsing (pure functions, unit-tested)
 # --------------------------------------------------------------------------
@@ -229,7 +233,7 @@ def _post_form(url: str, data: dict) -> dict:
 
 class SpotifyClient:
     def __init__(self, client_id: str, redirect_uri: str = DEFAULT_REDIRECT,
-                 token_file: Path = TOKEN_FILE):
+                 token_file: Path = TOKEN_FILE, interactive: bool = True):
         if not client_id:
             raise SpotifyError(
                 "Client ID Spotify manquant : passe --client-id ou définis SPOTIFY_CLIENT_ID."
@@ -237,6 +241,8 @@ class SpotifyClient:
         self.client_id = client_id
         self.redirect_uri = redirect_uri
         self.token_file = token_file
+        # When False (web interface), never open a browser login on our own.
+        self.interactive = interactive
         self._token: dict | None = None
 
     # ---- token management ------------------------------------------------
@@ -274,11 +280,13 @@ class SpotifyClient:
                 return self._token["access_token"]
             except SpotifyError:
                 pass
+        if not self.interactive:
+            raise NotLoggedIn("Connexion à Spotify nécessaire.")
         self.login()
         return self._token["access_token"]
 
-    def login(self) -> None:
-        """Interactive login: opens the browser and waits for the redirect."""
+    def authorization_request(self) -> tuple[str, str, str]:
+        """Build the Spotify authorization URL. Returns (url, verifier, state)."""
         verifier = _b64url(secrets.token_bytes(64))
         challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
         state = secrets.token_urlsafe(16)
@@ -291,7 +299,32 @@ class SpotifyClient:
             "scope": SCOPES,
             "state": state,
         }
-        url = f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
+        return f"{AUTH_URL}?{urllib.parse.urlencode(params)}", verifier, state
+
+    def exchange_code(self, code: str, verifier: str) -> None:
+        """Second half of the login: trade the authorization code for a token."""
+        self._save(_post_form(TOKEN_URL, {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": self.redirect_uri,
+            "client_id": self.client_id,
+            "code_verifier": verifier,
+        }))
+
+    def is_logged_in(self) -> bool:
+        tok = self._load()
+        return bool(tok and (tok.get("refresh_token") or tok.get("expires_at", 0) > time.time()))
+
+    def logout(self) -> None:
+        self._token = None
+        try:
+            self.token_file.unlink()
+        except FileNotFoundError:
+            pass
+
+    def login(self) -> None:
+        """Interactive login: opens the browser and waits for the redirect."""
+        url, verifier, state = self.authorization_request()
 
         result: dict = {}
         redirect = urllib.parse.urlparse(self.redirect_uri)
@@ -321,13 +354,7 @@ class SpotifyClient:
 
         if result.get("state") != state or "code" not in result:
             raise SpotifyError(f"Connexion Spotify annulée ou refusée : {result.get('error', 'délai dépassé')}")
-        self._save(_post_form(TOKEN_URL, {
-            "grant_type": "authorization_code",
-            "code": result["code"],
-            "redirect_uri": self.redirect_uri,
-            "client_id": self.client_id,
-            "code_verifier": verifier,
-        }))
+        self.exchange_code(result["code"], verifier)
 
     # ---- API calls -------------------------------------------------------
     def get(self, url: str, params: dict | None = None) -> dict:
@@ -375,6 +402,9 @@ class SpotifyClient:
             url, params = page.get("next"), None
         return tracks
 
+    def me(self) -> dict:
+        return self.get("/me")
+
     def my_playlists(self) -> list[dict]:
         out: list[dict] = []
         url: str | None = f"{API}/me/playlists"
@@ -385,10 +415,13 @@ class SpotifyClient:
                 if not p:
                     continue
                 count = (p.get("items") or p.get("tracks") or {}).get("total")
+                owner = p.get("owner") or {}
                 out.append({
                     "id": p.get("id"),
                     "name": p.get("name"),
-                    "owner": (p.get("owner") or {}).get("display_name"),
+                    "owner": owner.get("display_name") or owner.get("id"),
+                    "owner_id": owner.get("id"),
+                    "collaborative": bool(p.get("collaborative")),
                     "tracks": count,
                 })
             url, params = page.get("next"), None

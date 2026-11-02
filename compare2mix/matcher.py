@@ -128,6 +128,8 @@ def _format_label(p: ParsedTitle) -> str:
 class Matcher:
     def __init__(self, library: list[Track]):
         # One entry per interpretation of each track (see _library_variants).
+        self.tracks = list(library)
+        self._by_key: dict[str, Track] = {t.key: t for t in self.tracks}
         self.library: list[_Prepared] = []
         self._by_isrc: dict[str, list[_Prepared]] = {}
         for track in library:
@@ -157,11 +159,39 @@ class Matcher:
                 found.add(idx)
         return found
 
-    def match(self, track: Track) -> MatchResult:
+    def get(self, key: str) -> Track | None:
+        return self._by_key.get(key)
+
+    def search(self, query: str, limit: int = 10) -> list[Track]:
+        """Free-text search in the library (for manual association)."""
+        q = fold(query)
+        if not q:
+            return []
+        hits = process.extract(q, self._keys, scorer=fuzz.WRatio, limit=limit * 4)
+        out: list[Track] = []
+        seen: set[int] = set()
+        for _, score, idx in hits:
+            t = self.library[idx].track
+            if id(t) not in seen and score >= 50:
+                seen.add(id(t))
+                out.append(t)
+            if len(out) == limit:
+                break
+        return out
+
+    def manual(self, track: Track, rb_track: Track) -> MatchResult:
+        """Result for a match chosen by the user."""
+        res = MatchResult(track, Status.FOUND, rb_track, 100.0, "manuel")
+        self._add_notes(res, _prepare(track), _prepare(rb_track))
+        return res
+
+    def match(self, track: Track, exclude: set[str] | frozenset = frozenset()) -> MatchResult:
+        """Best library match for ``track``, ignoring library keys in ``exclude``."""
         sp = _prepare(track)
 
         if track.isrc:
-            hits = self._by_isrc.get(track.isrc.upper().strip())
+            hits = [h for h in self._by_isrc.get(track.isrc.upper().strip(), [])
+                    if h.track.key not in exclude]
             if hits:
                 rb = hits[0]
                 res = MatchResult(track, Status.FOUND, rb.track, 100.0, "ISRC")
@@ -169,17 +199,18 @@ class Matcher:
                 self._add_notes(res, sp, rb)
                 return res
 
-        if not self.library:
-            return MatchResult(track, Status.MISSING)
-
         best_per_track: dict[int, tuple[float, _Prepared]] = {}
-        for idx in self._candidates(sp):
+        for idx in self._candidates(sp) if self.library else ():
             rb = self.library[idx]
+            if rb.track.key in exclude:
+                continue
             total, _parts = _score(sp, rb)
             prev = best_per_track.get(id(rb.track))
             if prev is None or total > prev[0]:
                 best_per_track[id(rb.track)] = (total, rb)
         scored = sorted(best_per_track.values(), key=lambda x: x[0], reverse=True)
+        if not scored:
+            return MatchResult(track, Status.MISSING)
 
         best_score, best = scored[0]
         if best_score >= FOUND_THRESHOLD:

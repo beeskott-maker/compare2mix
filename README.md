@@ -53,6 +53,26 @@ avoir **Spotify Premium**, et seules les playlists dont tu es **propriétaire ou
 sont lisibles. Pour une playlist éditoriale ou celle de quelqu'un d'autre, utilise l'option A,
 ou duplique-la d'abord dans ta bibliothèque Spotify.
 
+## Interface web locale (recommandé)
+
+```bash
+compare2mix web
+```
+
+La page s'ouvre dans le navigateur sur <http://127.0.0.1:8888/> (elle ne tourne que sur ton Mac) :
+
+- choix de la playlist dans la liste (les abonnements non lisibles sont grisés) ;
+- résultats triés : ❌ manquants, 🟡 à vérifier, ✅ trouvés, avec filtre texte ;
+- corrections d'un clic : **C'est bien lui** / **Ce n'est pas lui** / **Je l'ai, le chercher…**
+  (recherche dans la bibliothèque) / **Annuler mes choix** ;
+- tes choix sont mémorisés dans `~/.compare2mix/decisions.json` et valent pour toutes les
+  playlists (y compris en ligne de commande) ;
+- export CSV et copie de la liste des manquants.
+
+La bibliothèque utilisée la dernière fois est rechargée automatiquement. Après un nouvel export
+XML depuis Rekordbox, clique sur la pastille « Rekordbox » puis sur **Charger**.
+Laisse le Terminal ouvert pendant l'utilisation (`Ctrl+C` pour arrêter).
+
 ## Options utiles
 
 | Option | Effet |
@@ -81,12 +101,15 @@ pytest
 ```
 
 Structure : `compare2mix/rekordbox.py` (lecture XML / master.db), `spotify.py` (API + CSV),
-`normalize.py`, `matcher.py`, `report.py`, `cli.py`.
+`normalize.py`, `matcher.py`, `decisions.py` (choix manuels), `web.py` + `static/index.html`
+(interface), `report.py`, `cli.py`.
 
 ## Feuille de route
 
 - [x] Moteur de comparaison + ligne de commande
-- [ ] Interface web locale (choix de la playlist, validation manuelle des « probables »)
-- [ ] Mémorisation des correspondances validées à la main
+- [x] Interface web locale (choix de la playlist, validation manuelle des « probables »)
+- [x] Mémorisation des correspondances validées à la main
+- [ ] Comparer toutes les playlists d'un coup (liste d'achats unique)
+- [ ] Playlist Spotify « À acheter »
 - [ ] Comparaison avec une playlist Rekordbox précise plutôt que toute la collection
 - [ ] Application macOS packagée

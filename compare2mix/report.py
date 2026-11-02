@@ -58,23 +58,27 @@ def print_report(results: list[MatchResult], show: set[Status], title: str = "")
 
 def write_csv(results: list[MatchResult], path: str | os.PathLike) -> None:
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh)
+        write_csv_to(results, fh)
+
+
+def write_csv_to(results: list[MatchResult], fh) -> None:
+    w = csv.writer(fh)
+    w.writerow([
+        "statut", "score", "méthode",
+        "spotify_artistes", "spotify_titre", "spotify_isrc", "spotify_uri",
+        "rekordbox_artistes", "rekordbox_titre", "rekordbox_mix",
+        "rekordbox_id", "rekordbox_fichier",
+        "remarques", "beatport", "bandcamp",
+    ])
+    for r in results:
+        m = r.match
+        links = search_links(r) if r.status != Status.FOUND else {}
         w.writerow([
-            "statut", "score", "méthode",
-            "spotify_artistes", "spotify_titre", "spotify_isrc", "spotify_uri",
-            "rekordbox_artistes", "rekordbox_titre", "rekordbox_mix",
-            "rekordbox_id", "rekordbox_fichier",
-            "remarques", "beatport", "bandcamp",
+            r.status.value, r.score, r.method,
+            r.spotify.artist_str, r.spotify.title, r.spotify.isrc or "",
+            r.spotify.source_id or "",
+            m.artist_str if m else "", m.title if m else "", (m.mix or "") if m else "",
+            (m.source_id or "") if m else "", (m.location or "") if m else "",
+            " | ".join(r.notes),
+            links.get("beatport", ""), links.get("bandcamp", ""),
         ])
-        for r in results:
-            m = r.match
-            links = search_links(r) if r.status != Status.FOUND else {}
-            w.writerow([
-                r.status.value, r.score, r.method,
-                r.spotify.artist_str, r.spotify.title, r.spotify.isrc or "",
-                r.spotify.source_id or "",
-                m.artist_str if m else "", m.title if m else "", (m.mix or "") if m else "",
-                (m.source_id or "") if m else "", (m.location or "") if m else "",
-                " | ".join(r.notes),
-                links.get("beatport", ""), links.get("bandcamp", ""),
-            ])

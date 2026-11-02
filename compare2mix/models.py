@@ -24,6 +24,17 @@ class Track:
     location: str | None = None
 
     @property
+    def key(self) -> str:
+        """Stable identifier: Spotify URI, else file path / TrackID, else text."""
+        if self.source_id and self.source_id.startswith("spotify:"):
+            return self.source_id
+        if self.location:
+            return f"file:{self.location}"
+        if self.source_id:
+            return f"id:{self.source_id}"
+        return f"txt:{self.artist_str.lower()}|{self.title.lower()}"
+
+    @property
     def artist_str(self) -> str:
         return ", ".join(self.artists)
 

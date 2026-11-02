@@ -20,3 +20,6 @@ compare2mix = "compare2mix.cli:main"
 
 [tool.setuptools]
 packages = ["compare2mix"]
+
+[tool.setuptools.package-data]
+compare2mix = ["static/*"]

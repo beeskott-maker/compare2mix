@@ -8,12 +8,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
-from pathlib import Path
 
-from . import rekordbox, spotify
+from . import config, rekordbox, spotify
+from .decisions import DecisionStore
 from .matcher import Matcher
 from .models import Status
 from .report import print_report, write_csv
@@ -21,14 +20,7 @@ from .report import print_report, write_csv
 _STATUS_ARGS = {"found": Status.FOUND, "probable": Status.PROBABLE, "missing": Status.MISSING}
 
 
-CONFIG_FILE = Path.home() / ".compare2mix" / "config.json"
-
-
-def _read_config() -> dict:
-    try:
-        return json.loads(CONFIG_FILE.read_text())
-    except (OSError, ValueError):
-        return {}
+CONFIG_FILE = config.CONFIG_FILE
 
 
 def _client(args) -> spotify.SpotifyClient:
@@ -36,14 +28,12 @@ def _client(args) -> spotify.SpotifyClient:
 
     A Client ID given explicitly is saved for next time.
     """
-    config = _read_config()
+    saved = config.load(CONFIG_FILE)
     client_id = args.client_id or os.environ.get("SPOTIFY_CLIENT_ID", "")
-    if client_id and client_id != config.get("client_id"):
-        config["client_id"] = client_id
-        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    if client_id and client_id != saved.get("client_id"):
+        config.update(CONFIG_FILE, client_id=client_id)
     return spotify.SpotifyClient(
-        client_id or config.get("client_id", ""),
+        client_id or saved.get("client_id", ""),
         redirect_uri=args.redirect_uri,
     )
 
@@ -75,7 +65,8 @@ def cmd_compare(args) -> int:
         playlist = client.playlist_tracks(pid)
     print(f"Playlist « {title} » : {len(playlist)} morceaux", file=sys.stderr)
 
-    results = Matcher(library).match_all(playlist)
+    matcher, store = Matcher(library), DecisionStore()
+    results = [store.resolve(matcher, t) for t in playlist]
     show = {_STATUS_ARGS[s] for s in args.show.split(",") if s in _STATUS_ARGS}
     print_report(results, show, title)
     if args.out:
@@ -93,6 +84,14 @@ def cmd_playlists(args) -> int:
 def cmd_login(args) -> int:
     _client(args).login()
     print("Connecté à Spotify.")
+    return 0
+
+
+def cmd_web(args) -> int:
+    from . import web
+
+    web.serve(port=args.port, open_browser=not args.no_browser,
+              library=args.xml, read_tags=args.read_tags)
     return 0
 
 
@@ -129,6 +128,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     lg = sub.add_parser("login", parents=[sp_opts], help="Se connecter à Spotify")
     lg.set_defaults(func=cmd_login)
+
+    w = sub.add_parser("web", help="Ouvrir l'interface dans le navigateur")
+    w.add_argument("--port", type=int, default=8888,
+                   help="Port local (défaut 8888, doit correspondre à la Redirect URI Spotify)")
+    w.add_argument("--xml", help="Export XML Rekordbox (sinon : le dernier utilisé ou data/rekordbox.xml)")
+    w.add_argument("--read-tags", action="store_true", help="Lire l'ISRC dans les tags des fichiers")
+    w.add_argument("--no-browser", action="store_true", help="Ne pas ouvrir le navigateur")
+    w.set_defaults(func=cmd_web)
     return parser
 
 
