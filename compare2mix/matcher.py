@@ -16,6 +16,8 @@ DURATION_TOLERANCE_S = 3.0
 CANDIDATES = 40
 # Penalty when a library title was reinterpreted (artist name removed from it).
 VARIANT_PENALTY = 2.0
+# Penalty for reading a library track with title and artist swapped.
+SWAP_PENALTY = 3.0
 
 
 @dataclass
@@ -25,12 +27,14 @@ class _Prepared:
     artists: str  # folded artist tokens
     search_key: str
     penalty: float = 0.0
+    note: str = ""  # explanation shown when this interpretation wins
 
 
 def _prepare(track: Track, title: str | None = None,
-             extra_artists: tuple[str, ...] = (), penalty: float = 0.0) -> _Prepared:
+             extra_artists: tuple[str, ...] = (), penalty: float = 0.0,
+             artists: list[str] | None = None, note: str = "") -> _Prepared:
     title = track.title if title is None else title
-    artists = list(track.artists) + list(extra_artists)
+    artists = list(track.artists if artists is None else artists) + list(extra_artists)
     # Untagged files are often named "Artist - Title" with no artist field.
     if not artists and " - " in title:
         maybe_artist, maybe_title = title.split(" - ", 1)
@@ -39,7 +43,7 @@ def _prepare(track: Track, title: str | None = None,
     if track.remixer and not parsed.significant:
         parsed.significant.append(fold(f"{track.remixer} remix"))
     akey = artist_key(artists, parsed.featured)
-    return _Prepared(track, parsed, akey, f"{akey} {parsed.base}".strip(), penalty)
+    return _Prepared(track, parsed, akey, f"{akey} {parsed.base}".strip(), penalty, note)
 
 
 def _name_like(segment: str) -> bool:
@@ -57,6 +61,13 @@ def _library_variants(track: Track) -> list[_Prepared]:
     and/or last " - " segment, that segment being treated as an artist.
     """
     variants = [_prepare(track)]
+    # Title and artist fields swapped in the tags (Artist="U Ain't Lyin'",
+    # Title="Peace Control").
+    if track.artists and track.title.strip():
+        variants.append(_prepare(
+            track, title=", ".join(track.artists), artists=[track.title],
+            penalty=SWAP_PENALTY, note="titre et artiste inversés dans Rekordbox",
+        ))
     segs = track.title.split(" - ")
     if len(segs) < 2:
         return variants
@@ -195,6 +206,8 @@ class Matcher:
 
     @staticmethod
     def _add_notes(res: MatchResult, sp: _Prepared, rb: _Prepared) -> None:
+        if rb.note:
+            res.notes.append(rb.note)
         if sp.parsed.version_key != rb.parsed.version_key:
             res.notes.append(
                 f"version différente : « {sp.parsed.version_key or 'originale'} » "

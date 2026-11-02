@@ -24,6 +24,9 @@ LIBRARY = [
     Track("Stolen Dance", ["Milky Chance"], source_id="stolen"),
     Track("I Am", ["Alloy Mental"], source_id="iam"),
     Track("Part 1 - The Beginning", ["Some Band"], source_id="part1"),
+    # Title and artist swapped in the tags.
+    Track("Peace Control", ["U Ain't Lyin'"], source_id="swapped"),
+    Track("Moving on Up", ["M People"], source_id="mpeople"),
 ]
 
 
@@ -42,6 +45,7 @@ def matcher():
     ("Deep Fear - Lumberjack & BRØMANCE Remix Edit", ["Sidekick", "Lumberjack", "BRØMANCE"], "deepfear"),
     ("Calling 1968", ["Dave Van Guten"], "calling"),
     ("Part 1 - The Beginning", ["Some Band"], "part1"),
+    ("U Ain't Lyin'", ["Peace Control"], "swapped"),
 ])
 def test_found(matcher, title, artists, expected_id):
     r = matcher.match(Track(title, artists))
@@ -59,3 +63,13 @@ def test_found(matcher, title, artists, expected_id):
 def test_missing(matcher, title, artists):
     r = matcher.match(Track(title, artists))
     assert r.status == Status.MISSING, (r.score, r.match and r.match.title)
+
+
+def test_swap_is_noted(matcher):
+    r = matcher.match(Track("U Ain't Lyin'", ["Peace Control"]))
+    assert "titre et artiste inversés dans Rekordbox" in r.notes
+
+
+def test_normal_match_has_no_swap_note(matcher):
+    r = matcher.match(Track("Moving on Up", ["M People"]))
+    assert r.status == Status.FOUND and r.notes == []
