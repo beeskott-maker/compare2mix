@@ -124,34 +124,51 @@ def test_key_unplugged_then_plugged(server, volumes):
     volumes.unplug("DJ KEY")
     src = make_wav(tmp / "Downloads" / "Nobody - Some Unknown Track.wav")
 
-    d = call("/api/downloads")
-    assert d["can_import"] is False and d["imported_now"] == []
-    assert d["settings"]["music_volume"] == str(key)
-    assert src.exists() and not key.exists()
-    # Manual import is refused with a clear message.
+    r = call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")
+    assert r["destination"]["available"] is False and r["destination"]["volume"] == str(key)
+    assert len(r["matches"]) == 1
+    # Transfer refused with a clear message, nothing written on the internal disk.
     with pytest.raises(urllib.error.HTTPError) as e:
         call("/api/import", {"source": str(src), "spotify_key": "spotify:track:9"})
     assert e.value.code == 409
     assert "pas branchée" in json.loads(e.value.read())["error"]
+    assert src.exists() and not key.exists()
 
     volumes.plug("DJ KEY")
-    d = call("/api/downloads")
-    assert d["can_import"] is True
-    assert d["imported_now"] == ["Nobody – Some Unknown Track"]
-    assert (key / "Musique" / "Nobody - Some Unknown Track.wav").exists()
-    assert not src.exists()
-    pl = rekordbox.load_xml_playlists(tmp / "import.xml")["Warm up"]
-    assert pl[-1].location == str(key / "Musique" / "Nobody - Some Unknown Track.wav")
+    assert call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")["destination"]["available"] is True
+    call("/api/import", {"source": str(src), "spotify_key": "spotify:track:9"})
+    assert (key / "Musique" / src.name).exists() and not src.exists()
+    x = call("/api/import-xml", {})
+    pl = rekordbox.load_xml_playlists(x["path"])["Warm up"]
+    assert pl[-1].location == str(key / "Musique" / src.name)
 
 
 def test_keep_original_copies(server):
     tmp, key, app, call = server
     call("/api/import-settings", {"keep_original": True})
     src = make_wav(tmp / "Downloads" / "Nobody - Some Unknown Track.wav")
-    assert call("/api/downloads")["imported_now"] == ["Nobody – Some Unknown Track"]
+    call("/api/import", {"source": str(src), "spotify_key": "spotify:track:9"})
     assert src.exists() and (key / "Musique" / src.name).exists()
-    # The original left in Downloads is not imported a second time.
-    assert call("/api/downloads")["imported_now"] == []
+    # The original left in Downloads is not proposed a second time.
+    assert call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")["matches"] == []
+
+
+def test_key_stats(server, volumes):
+    tmp, key, app, call = server
+    # Sample collection: 8 tracks, none on the key (they live in /Users/dj/Music).
+    st = call("/api/status")["library"]["key"]
+    assert (st["name"], st["absent"], st["on_key"], st["mounted"]) == ("DJ KEY", 8, 0, True)
+    # Two tracks on the key: one present, one whose file has disappeared.
+    (key / "Musique").mkdir(exist_ok=True)
+    (key / "Musique" / "a.mp3").write_bytes(b"x")
+    app.collection[0].location = str(key / "Musique" / "a.mp3")
+    app.collection[1].location = str(key / "Musique" / "gone.mp3")
+    st = app.key_stats()
+    assert (st["absent"], st["on_key"]) == (7, 1)
+    # Key unplugged: files on it cannot be checked, they count as on the key.
+    volumes.unplug("DJ KEY")
+    st = app.key_stats()
+    assert (st["absent"], st["on_key"], st["mounted"]) == (6, 2, False)
 
 
 def test_library_on_key_loaded_when_plugged(server, volumes, tmp_path, monkeypatch):
@@ -171,7 +188,7 @@ def test_library_on_key_loaded_when_plugged(server, volumes, tmp_path, monkeypat
     assert st["count"] == 0 and st["available"] is False
     volumes.plug("DJ KEY")
     shutil.copy(FIX / "rekordbox_sample.xml", key / "rekordbox.xml")
-    app2.scan_downloads()  # the periodic scan reloads the library
+    app2.autoload()  # next start with the key plugged in
     assert app2.library_status()["count"] == 8
     assert app2.library_status()["path"] == str(key / "rekordbox.xml")
     assert json.loads((tmp / "config.json").read_text())["library_path"] == str(key / "rekordbox.xml")

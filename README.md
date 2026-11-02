@@ -59,56 +59,41 @@ ou duplique-la d'abord dans ta bibliothèque Spotify.
 compare2mix web
 ```
 
-La page s'ouvre sur <http://127.0.0.1:8888/> (elle ne tourne que sur ton Mac) sous forme d'assistant
-en 3 étapes. Quand tout est déjà prêt, elle s'ouvre directement à l'étape 2.
+La page s'ouvre sur <http://127.0.0.1:8888/> (elle ne tourne que sur ton Mac). C'est un assistant
+en 5 étapes :
 
-1. **Connexion & bibliothèque** : test de la connexion Spotify (Client ID, connexion,
-   déconnexion) et envoi du fichier XML Rekordbox (glisser-déposer ou sélection ; par ex. depuis la
-   clé USB). Une copie est gardée : à refaire seulement après un nouvel export.
-   Plus simple encore : exporte le XML directement dans ton dossier **Téléchargements**, il est
-   repéré et chargé tout seul (seulement s'il est plus récent que la bibliothèque actuelle ; le
-   fichier n'est pas déplacé).
-2. **Résultats** : la playlist par défaut (« À mixer » ou celle marquée ★) est comparée
-   automatiquement ; onglets ❌ / 🟡 / ✅, clic sur un titre = copie du lien Spotify, copie de la
-   liste des manquants, export CSV, corrections d'un clic (mémorisées).
-3. **Téléchargements → Rekordbox** : surveillance du dossier Téléchargements, déplacement des
-   morceaux reconnus vers la clé, puis téléchargement du fichier XML à importer dans Rekordbox.
+1. **Playlist** : choix de la playlist Spotify (« À mixer » par défaut). Le témoin en haut à droite
+   indique la connexion à Spotify.
+2. **Exporter** : exporte ta collection Rekordbox (Fichier → Exporter la collection au format xml)
+   dans **Téléchargements**, puis « C'est fait, comparer » ; **ou** dépose directement le fichier
+   XML dans la page.
+3. **Manquants** : en tête, la bibliothèque lue (tracks dans Rekordbox, nouveaux titres à
+   télécharger, tracks absents de la clé USB) ; puis les morceaux manquants. Clic sur un titre =
+   copie du lien Spotify ; copie de la liste, export CSV, corrections d'un clic.
+4. **Récapitulatif** : fichiers audio trouvés dans Téléchargements comparés aux manquants
+   (« 2 / 37 manquants retrouvés »), avec une case par fichier (✅ sûr, 🟡 à vérifier), les fichiers
+   non reconnus, les morceaux toujours manquants et la destination. **Rien n'est déplacé ici.**
+5. **Copie & XML** : « Lancer la copie » déplace les fichiers cochés vers la clé avec une barre de
+   progression, puis génère le fichier XML à importer dans Rekordbox (bouton de téléchargement et
+   mode d'emploi).
 
-## Téléchargements → Rekordbox
+« Tracks absents de la clé » : morceaux de ta collection Rekordbox dont le fichier n'est pas sur la
+clé USB (restés sur le Mac, liens Apple Music…) et, clé branchée, ceux dont le fichier n'y est
+plus.
 
-Quand l'interface web est ouverte, compare2mix surveille ton dossier **Téléchargements**
-(et ses sous-dossiers directs, ex. un album Bandcamp décompressé) :
-
-1. chaque nouveau fichier audio (MP3, WAV, AIFF, FLAC, M4A) est lu (tags, sinon nom du fichier)
-   et comparé aux morceaux **manquants** des playlists comparées ;
-2. correspondance sûre ✅ : le fichier est **déplacé** vers le dossier choisi (ta clé USB ; option
-   pour garder l'original dans Téléchargements) et le morceau passe en ✅ « téléchargé » ;
-   correspondance douteuse 🟡 : bouton **Copier vers la clé** / **Ignorer** ;
-3. bouton **Télécharger le fichier XML à importer** : il contient la playlist Rekordbox désignée
-   (⚙ Réglages) avec **ses morceaux actuels + les nouveaux**. Une copie toujours à jour est aussi
-   écrite dans `~/Music/compare2mix/rekordbox-import.xml`.
-
-Dans Rekordbox (réglage à faire une fois) : Préférences → Avancé → Base de données →
-« Bibliothèque rekordbox xml » → choisir ce fichier, et Préférences → Affichage → Disposition →
-cocher « rekordbox xml ». Ensuite, à chaque fois : barre latérale → rekordbox xml → Listes de
-lecture → clic droit sur la playlist → **Importer la liste de lecture**.
+Le lien **Réglages** (en haut) permet de changer le dossier Téléchargements, le dossier de
+rangement sur la clé (avec suggestion), copier au lieu de déplacer, la playlist Rekordbox cible
+(par défaut le même nom que la playlist Spotify) et l'emplacement du fichier d'import.
 
 compare2mix n'écrit jamais dans la base de Rekordbox (`master.db`) : l'import XML est la voie
-officielle et sans risque pour ta collection. Les dossiers, la playlist cible et l'import
-automatique se règlent dans ⚙ Réglages.
+officielle et sans risque pour ta collection. Si la clé n'est pas branchée, rien n'est écrit
+(pas de faux dossier sur le disque du Mac) : branche-la puis « Revérifier ».
 
-### Musique et bibliothèque sur une clé USB
-
-Indique dans ⚙ Réglages le dossier de la clé où ranger les morceaux
-(ex. `/Volumes/MA CLE/Musique` ; le dossier qui contient déjà l'essentiel de ta collection
-est proposé). Charge l'export XML Rekordbox depuis la clé (ex. `/Volumes/MA CLE/rekordbox.xml`).
-
-- Clé débranchée : rien n'est écrit (pas de faux dossier sur le disque du Mac), les fichiers
-  restent dans Téléchargements et sont rangés automatiquement dès que la clé est branchée.
-  La bibliothèque sur la clé est rechargée à ce moment-là.
-- Option « garder aussi une copie dans le dossier surveillé » pour copier au lieu de déplacer.
-- Le fichier d'import pour Rekordbox reste par défaut sur le Mac
-  (`~/Music/compare2mix/rekordbox-import.xml`), pour que le réglage de Rekordbox ne change pas.
+Dans Rekordbox (réglage à faire une fois) : Préférences → Affichage → Disposition → cocher
+« rekordbox xml », puis Préférences → Avancé → Base de données → « Bibliothèque rekordbox xml » →
+choisir `~/Music/compare2mix/rekordbox-import.xml` (copie toujours à jour). Ensuite, à chaque fois :
+barre latérale → rekordbox xml → Listes de lecture → clic droit sur la playlist → **Importer la
+liste de lecture**. La playlist contient ses morceaux actuels + les nouveaux.
 
 ## Options utiles
 
@@ -146,7 +131,7 @@ Structure : `compare2mix/rekordbox.py` (lecture XML / master.db), `spotify.py` (
 - [x] Moteur de comparaison + ligne de commande
 - [x] Interface web locale (choix de la playlist, validation manuelle des « probables »)
 - [x] Mémorisation des correspondances validées à la main
-- [x] Surveillance des téléchargements et import dans Rekordbox (via XML)
+- [x] Récupération des fichiers téléchargés et import dans Rekordbox (via XML)
 - [ ] Comparer toutes les playlists d'un coup (liste d'achats unique)
 - [ ] Playlist Spotify « À acheter »
 - [ ] Comparaison avec une playlist Rekordbox précise plutôt que toute la collection

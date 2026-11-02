@@ -5,295 +5,344 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>compare2mix</title>
 <style>
+  /* Layout: a single column wizard; stepper on top, one panel per step, actions at the bottom. */
   :root {
-    --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e3e3e0;
-    --accent: #1db954; --accent-ink: #ffffff; --found: #1f9d55; --probable: #c98a00; --missing: #d64545;
-    --found-bg: #e8f6ee; --probable-bg: #fdf4dc; --missing-bg: #fbe9e9; --chip: #efefec;
-    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+    --bg: #f5f6f3; --panel: #ffffff; --fg: #1c1d1b; --muted: #676a64; --line: #e1e3dd;
+    --accent: #1c9c4a; --accent-ink: #ffffff; --accent-soft: #e5f4ea;
+    --ok: #1c8a45; --warn: #a96f00; --ko: #c43d3d;
+    --ok-bg: #e5f4ea; --warn-bg: #fbf1d8; --ko-bg: #f9e6e6; --chip: #eceee9;
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #121214; --panel: #1c1c1f; --text: #ececee; --muted: #9a9aa1; --line: #2e2e33;
-      --found: #4cc47f; --probable: #e6b43c; --missing: #f07272;
-      --found-bg: #17301f; --probable-bg: #33290f; --missing-bg: #3a1a1a; --chip: #2a2a2f;
-      --shadow: none;
+      --bg: #121412; --panel: #1b1e1b; --fg: #e9ebe6; --muted: #9a9e96; --line: #2d312c;
+      --accent: #2fbf63; --accent-ink: #08130b; --accent-soft: #173322;
+      --ok: #4fd082; --warn: #e5b445; --ko: #ef7a7a;
+      --ok-bg: #173322; --warn-bg: #352a10; --ko-bg: #3a1c1c; --chip: #272b26;
+      color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-ui); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px 48px; }
+  header { padding-top: 18px; }
+  h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
+  h1 span { color: var(--accent); }
+  h2 { font-size: 20px; margin: 0 0 4px; text-wrap: balance; }
+  h3 { font-size: 15px; margin: 0; }
+  p { margin: 0; }
   a { color: inherit; }
-  header { padding: 14px 24px 0; border-bottom: 1px solid var(--line); background: var(--panel); }
-  .top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 18px; margin: 0; letter-spacing: -.01em; }
-  header h1 span { color: var(--accent); }
+  code { font-family: var(--font-mono); font-size: 13px; background: var(--chip); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  input[type=text], select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; max-width: 100%; }
 
   /* stepper */
-  .stepper { display: flex; gap: 4px; margin-top: 12px; overflow-x: auto; }
-  .stepper button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none;
-    padding: 8px 14px 10px; display: flex; gap: 8px; align-items: center; color: var(--muted); white-space: nowrap; }
-  .stepper button .num { width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center;
-    background: var(--chip); font-weight: 700; font-size: 13px; }
-  .stepper button.current { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-  .stepper button.current .num { background: var(--accent); color: var(--accent-ink); }
-  .stepper button.done .num { background: var(--found-bg); color: var(--found); }
-  .stepper button:disabled { opacity: .45; cursor: not-allowed; }
+  .stepper { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 16px 0 22px; padding: 0; list-style: none; }
+  .stepper button { width: 100%; border: 0; background: none; padding: 0; text-align: left; color: var(--muted); cursor: pointer; font: inherit; }
+  .stepper button:disabled { cursor: not-allowed; opacity: .55; }
+  .stepper .bar { height: 4px; border-radius: 2px; background: var(--line); margin-bottom: 8px; }
+  .stepper .lbl { font-size: 13px; display: flex; gap: 6px; align-items: baseline; }
+  .stepper .n { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stepper .done .bar { background: var(--accent); opacity: .45; }
+  .stepper .current .bar { background: var(--accent); }
+  .stepper .current { color: var(--fg); font-weight: 600; }
+  .stepper button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 
-  main { max-width: 1100px; margin: 0 auto; padding: 20px 24px 60px; }
-  .step-intro { margin: 0 0 16px; color: var(--muted); }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
-  .panel h2 { font-size: 16px; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
-  .panel p { margin: 4px 0 10px; color: var(--muted); font-size: 14px; }
-  .state { font-size: 14px; margin: 6px 0 10px; }
-  .state.ok { color: var(--found); } .state.ko { color: var(--missing); } .state.warn { color: var(--probable); }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  input[type=text], select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
-    border-radius: 8px; padding: 8px 10px; min-width: 0; }
-  input[type=text] { flex: 1 1 260px; }
-  select { flex: 1 1 320px; max-width: 100%; }
-  button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
-    color: var(--text); padding: 7px 12px; cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--muted); }
-  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  button.small { padding: 3px 9px; font-size: 13px; }
-  label.check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
-  .nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
-  .nav .spacer { flex: 1; }
-
-  /* drop zone */
-  .drop { display: block; border: 2px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center;
-    cursor: pointer; color: var(--muted); transition: border-color .15s, background .15s; }
-  .drop:hover, .drop.over { border-color: var(--accent); background: var(--found-bg); color: var(--text); }
-  .drop b { color: var(--text); }
-
-  /* results */
-  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 12px; align-items: center; }
-  .tab { border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 14px; }
-  .tab.active { outline: 2px solid var(--text); outline-offset: -2px; }
-  .tab.missing { background: var(--missing-bg); color: var(--missing); border-color: transparent; }
-  .tab.probable { background: var(--probable-bg); color: var(--probable); border-color: transparent; }
-  .tab.found { background: var(--found-bg); color: var(--found); border-color: transparent; }
-  .tabs input { flex: 0 1 240px; margin-left: auto; }
-  .results { display: flex; flex-direction: column; gap: 8px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--muted);
-    border-radius: 10px; padding: 10px 14px; box-shadow: var(--shadow); }
-  .card.found { border-left-color: var(--found); }
-  .card.probable { border-left-color: var(--probable); }
-  .card.missing { border-left-color: var(--missing); }
-  .line1 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-  .sp { font-weight: 600; overflow-wrap: anywhere; }
-  a.sp { cursor: copy; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .panel + .panel { margin-top: 16px; }
+  .stack { display: grid; gap: 16px; }
+  .lead { color: var(--muted); }
+  .note { color: var(--muted); font-size: 12px; }
   .muted { color: var(--muted); font-size: 13px; }
-  .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--muted); }
-  .badge.manual, .badge.import { background: var(--found-bg); color: var(--found); }
-  .rb { margin-top: 4px; font-size: 14px; overflow-wrap: anywhere; }
-  .rb .arrow { color: var(--muted); }
-  .notes { margin: 4px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
-  .notes li::before { content: "· "; }
-  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
-  .alt { font-size: 13px; }
-  .search-box { margin-top: 8px; }
-  .search-results { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
-  .hit, .item { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap;
-    padding: 8px 10px; border-radius: 8px; background: var(--bg); margin-top: 6px; font-size: 14px; }
-  .item .what { overflow-wrap: anywhere; flex: 1 1 300px; }
-  .empty { text-align: center; color: var(--muted); padding: 30px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .spread { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  .nav { display: flex; gap: 8px; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; }
+  .btn { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); padding: 8px 14px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.small { padding: 3px 10px; font-size: 13px; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .linkbtn { border: 0; background: none; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 13px; background: var(--ko-bg); color: var(--ko); }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill.on { background: var(--ok-bg); color: var(--ok); }
+  .msg { border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  .msg.ko { background: var(--ko-bg); color: var(--ko); }
+  .msg.warn { background: var(--warn-bg); color: var(--warn); }
+
+  /* step 1 */
+  #plSelect { justify-self: start; width: auto; }
+
+  /* step 2 */
+  ol.howto { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+  .kbd { font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; background: var(--bg); white-space: nowrap; }
+  .or { display: flex; align-items: center; gap: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; margin-block: 6px; }
+  .or::before, .or::after { content: ""; flex: 1; height: 2px; border-radius: 1px; background: var(--accent); opacity: .55; }
+  .or span { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 17px; }
+  .drop { display: grid; gap: 4px; justify-items: center; text-align: center; border: 2px dashed var(--line); border-radius: 10px; padding: 22px 16px; cursor: pointer; color: var(--muted); transition: border-color .15s, background .15s; }
+  .drop b { color: var(--fg); }
+  .drop:hover, .drop.over, .drop:focus-within { border-color: var(--accent); background: var(--accent-soft); }
 
   /* step 3 */
-  .form-grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; margin-top: 10px; }
-  .form-grid label { color: var(--muted); font-size: 14px; }
-  details { margin-top: 10px; }
-  summary { cursor: pointer; color: var(--muted); font-size: 14px; }
-  ol.howto { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
-  ol.howto li { margin: 4px 0; }
-  .big-count { font-size: 28px; font-weight: 700; }
-  code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size: 13px; overflow-wrap: anywhere; }
+  .found { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; min-width: 0; }
+  .fileicon { width: 46px; height: 56px; border-radius: 6px; background: var(--accent-soft); color: var(--ok); display: grid; place-items: center; font: 700 12px var(--font-mono); }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .fact { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+  .fact b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .fact span { color: var(--muted); font-size: 13px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tab { border: 0; border-radius: 999px; padding: 4px 12px; font: 600 14px var(--font-ui); background: var(--chip); color: var(--muted); cursor: pointer; }
+  .tab.ko { background: var(--ko-bg); color: var(--ko); }
+  .tab.ok { background: var(--ok-bg); color: var(--ok); }
+  .tab.warn { background: var(--warn-bg); color: var(--warn); }
+  .tab.active { outline: 2px solid currentColor; outline-offset: -2px; }
+  .tabs input { flex: 0 1 220px; margin-left: auto; }
+  .results { display: grid; gap: 6px; }
+  .card { padding: 9px 12px; border-radius: 8px; background: var(--bg); border-left: 3px solid var(--muted); }
+  .card.missing { border-left-color: var(--ko); }
+  .card.probable { border-left-color: var(--warn); }
+  .card.found { border-left-color: var(--ok); }
+  .line1 { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .sp { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  a.sp { cursor: copy; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+  .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+  .badge.manual, .badge.import { background: var(--ok-bg); color: var(--ok); }
+  .rb { margin-top: 2px; font-size: 14px; overflow-wrap: anywhere; }
+  .notes { margin: 2px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+  .notes li::before { content: "· "; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+  .search-box { margin-top: 8px; display: grid; gap: 6px; }
+  .hit { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 6px 10px; border-radius: 6px; background: var(--panel); font-size: 14px; }
+  .empty { text-align: center; color: var(--muted); padding: 24px; }
 
-  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text);
-    color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; max-width: 90vw;
-    opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  /* step 4 */
+  .ratio { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .ratio .big { font-size: 44px; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; }
+  .ratio .of { font-size: 22px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meter { height: 10px; border-radius: 5px; background: var(--chip); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 5px; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.file { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; min-width: 180px; }
+  .status { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .status.found { background: var(--ok-bg); color: var(--ok); }
+  .status.probable { background: var(--warn-bg); color: var(--warn); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  details[open] summary { margin-bottom: 8px; }
+  .dest { background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+
+  /* step 5 */
+  .progress { height: 14px; border-radius: 7px; background: var(--chip); overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 7px; transition: width .35s ease; }
+  .tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .tasks li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 14px; color: var(--muted); }
+  .tasks li.run { color: var(--fg); font-weight: 600; }
+  .tasks li.ok { color: var(--fg); }
+  .tasks li.err { color: var(--ko); }
+  .tasks li .ic { text-align: center; }
+  .tasks li .t { min-width: 0; overflow-wrap: anywhere; }
+  .done-card { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
+
+  /* settings overlay */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: start center; padding: 40px 16px; overflow-y: auto; z-index: 20; }
+  .overlay .panel { width: min(640px, 100%); }
+  .form-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 12px; align-items: center; }
+  .form-grid label { color: var(--muted); font-size: 14px; }
+  label.check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
+
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; z-index: 30; }
   .toast.show { opacity: 1; }
-  .toast.error { background: var(--missing); color: #fff; }
-  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line);
-    border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+  .toast.error { background: var(--ko); color: #fff; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .hidden { display: none !important; }
-  @media (max-width: 600px) {
-    header, main { padding-left: 16px; padding-right: 16px; }
-    .tabs input { flex-basis: 100%; margin-left: 0; }
+  @media (prefers-reduced-motion: reduce) { .progress i, .toast { transition: none; } .spinner { animation: none; } }
+  @media (max-width: 560px) {
+    .wrap { padding: 0 16px 40px; }
+    .stepper .name { display: none; }
+    .ratio .big { font-size: 36px; }
     .form-grid { grid-template-columns: 1fr; }
-    .stepper button { padding: 8px 8px 10px; }
-    .stepper .label-long { display: none; }
+    .tabs input { flex-basis: 100%; margin-left: 0; }
   }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-<header>
-  <div class="top"><h1>compare<span>2</span>mix</h1></div>
-  <nav class="stepper" id="stepper">
-    <button data-step="1"><span class="num">1</span><span>Connexion<span class="label-long"> & bibliothèque</span></span></button>
-    <button data-step="2"><span class="num">2</span><span>Résultats</span></button>
-    <button data-step="3"><span class="num">3</span><span>Téléchargements<span class="label-long"> → Rekordbox</span></span></button>
-  </nav>
-</header>
-
-<main>
-  <!-- ================= STEP 1 ================= -->
-  <section class="step" id="step1">
-    <p class="step-intro">Vérifions l'accès à Spotify et chargeons ta collection Rekordbox.</p>
-
-    <div class="panel">
-      <h2>🎧 Spotify</h2>
-      <div class="state" id="spState">…</div>
-      <div id="cidRow" class="hidden">
-        <p>Colle le <b>Client ID</b> de ton app Spotify (developer.spotify.com → ton app → Settings).
-          Sa Redirect URI doit être <code id="redirectUri"></code>.</p>
-        <div class="row">
-          <input type="text" id="clientId" placeholder="Client ID" spellcheck="false">
-          <button id="cidSave">Enregistrer</button>
-        </div>
-      </div>
-      <div class="row">
-        <a href="/login" id="loginLink" class="hidden"><button class="primary">Se connecter à Spotify</button></a>
-        <button id="spTest" class="hidden">Tester la connexion</button>
-        <button id="logoutBtn" class="hidden">Se déconnecter</button>
-      </div>
+<div class="wrap">
+  <header class="spread">
+    <h1>compare<span>2</span>mix</h1>
+    <div class="row">
+      <button class="linkbtn" id="settingsBtn">Réglages</button>
+      <span class="pill" id="spotifyPill"><span class="dot"></span><span>Spotify…</span></span>
     </div>
+  </header>
 
-    <div class="panel">
-      <h2>💿 Bibliothèque Rekordbox</h2>
-      <div class="state" id="libState">…</div>
+  <ol class="stepper" id="stepper">
+    <li><button data-go="1"><div class="bar"></div><div class="lbl"><span class="n">1</span><span class="name">Playlist</span></div></button></li>
+    <li><button data-go="2"><div class="bar"></div><div class="lbl"><span class="n">2</span><span class="name">Exporter</span></div></button></li>
+    <li><button data-go="3"><div class="bar"></div><div class="lbl"><span class="n">3</span><span class="name">Manquants</span></div></button></li>
+    <li><button data-go="4"><div class="bar"></div><div class="lbl"><span class="n">4</span><span class="name">Récapitulatif</span></div></button></li>
+    <li><button data-go="5"><div class="bar"></div><div class="lbl"><span class="n">5</span><span class="name">Copie & XML</span></div></button></li>
+  </ol>
+
+  <!-- STEP 1: Spotify playlist -->
+  <section class="step" data-step="1">
+    <div class="panel stack">
+      <h3><label for="plSelect">Playlist Spotify</label></h3>
+      <div id="spLogin" class="stack" hidden>
+        <div id="cidRow" class="stack" hidden>
+          <p class="lead">Colle le <b>Client ID</b> de ton app Spotify (developer.spotify.com → ton app → Settings).
+            Sa Redirect URI doit être <code id="redirectUri"></code>.</p>
+          <div class="row"><input type="text" id="clientId" placeholder="Client ID" spellcheck="false"><button class="btn" id="cidSave">Enregistrer</button></div>
+        </div>
+        <a href="/login" id="loginLink"><button class="btn primary">Se connecter à Spotify</button></a>
+      </div>
+      <select id="plSelect" hidden><option>Chargement des playlists…</option></select>
+    </div>
+    <div class="nav"><span></span><button class="btn primary" id="next1" disabled>Suivant →</button></div>
+  </section>
+
+  <!-- STEP 2: export the Rekordbox library -->
+  <section class="step" data-step="2" hidden>
+    <div class="panel stack">
+      <div>
+        <h2>Exporte ta bibliothèque Rekordbox</h2>
+        <p class="lead">Merci d'exporter ta bibliothèque dans ton dossier Téléchargements.</p>
+      </div>
+      <ol class="howto">
+        <li>Ouvre Rekordbox, menu <span class="kbd">Fichier</span> → <span class="kbd">Exporter la collection au format xml</span>.</li>
+        <li>Choisis le dossier <b>Téléchargements</b> comme destination. Le nom du fichier n'a pas d'importance.</li>
+        <li>Clique sur <b>Enregistrer</b>, puis reviens ici.</li>
+      </ol>
+      <div class="or"><span>ou</span></div>
       <label class="drop" id="drop">
         <input type="file" id="libFile" accept=".xml,application/xml,text/xml" hidden>
-        <div>📄 <b>Glisse ici ton fichier XML Rekordbox</b> ou clique pour le choisir</div>
-        <div class="muted">Rekordbox → Fichier → Exporter la collection au format xml (par ex. sur ta clé USB)</div>
-        <div class="muted">Ou exporte-le simplement dans ton dossier Téléchargements : il sera chargé tout seul.</div>
+        <span><b>Dépose ici ton fichier XML Rekordbox</b></span>
+        <span>ou clique pour le choisir (par exemple sur ta clé USB)</span>
       </label>
-      <div class="row" style="margin-top:10px">
-        <label class="check"><input type="checkbox" id="readTags"> lire aussi les ISRC dans les fichiers audio (clé branchée, plus lent)</label>
-      </div>
+      <div class="msg ko" id="exportError" hidden></div>
     </div>
-
-    <div class="nav"><span class="spacer"></span>
-      <button class="primary" id="next1" disabled>Voir les résultats →</button>
-    </div>
+    <div class="nav"><button class="btn" data-go="1">← Retour</button><button class="btn primary" id="next2">C'est fait, comparer →</button></div>
   </section>
 
-  <!-- ================= STEP 2 ================= -->
-  <section class="step hidden" id="step2">
-    <p class="step-intro">Compare une playlist Spotify à ta collection. Clique sur un titre pour copier son lien Spotify.</p>
-
-    <div class="panel">
-      <div class="row">
-        <select id="plSelect"><option>Chargement des playlists…</option></select>
-        <button id="defaultBtn" title="Ouvrir et comparer cette playlist au lancement">☆ Par défaut</button>
-        <button id="refreshBtn" title="Relire la playlist sur Spotify">Actualiser</button>
+  <!-- STEP 3: library + missing tracks -->
+  <section class="step" data-step="3" hidden>
+    <div class="panel stack">
+      <div class="spread">
+        <div class="found">
+          <div class="fileicon">XML</div>
+          <div>
+            <div><b>Bibliothèque Rekordbox :</b> <b id="libName"></b></div>
+            <div class="note" id="libWhere"></div>
+          </div>
+        </div>
+        <button class="btn small" id="reread">Relire</button>
       </div>
-      <div class="row" style="margin-top:8px">
-        <button id="copyBtn" disabled>📋 Copier la liste des manquants</button>
-        <button id="exportBtn" disabled>Exporter CSV</button>
+      <div class="facts">
+        <div class="fact"><b id="factTracks">–</b><span>tracks dans Rekordbox</span></div>
+        <div class="fact"><b id="factMissing">–</b><span>nouveaux titres à télécharger</span></div>
+        <div class="fact" id="factKeyBox"><b id="factKey">–</b><span id="factKeyLbl">tracks absents de la clé</span></div>
       </div>
     </div>
-
-    <div id="resultsSection" class="hidden">
+    <div class="panel stack">
+      <div class="spread">
+        <div>
+          <h2>Morceaux manquants</h2>
+          <p class="lead">Playlist <b id="plName"></b> · <span id="plCount"></span> morceaux. Clique sur un titre pour copier son lien Spotify.</p>
+        </div>
+        <div class="row"><button class="btn" id="copyList">Copier la liste</button><button class="btn" id="exportCsv">Exporter CSV</button></div>
+      </div>
       <div class="tabs" id="tabs">
-        <button class="tab missing" data-filter="missing">❌ Manquants <span></span></button>
-        <button class="tab probable" data-filter="probable">🟡 À vérifier <span></span></button>
-        <button class="tab found" data-filter="found">✅ Trouvés <span></span></button>
-        <button class="tab" data-filter="all">Tous <span></span></button>
+        <button class="tab ko" data-filter="missing">❌ Manquants <span></span></button>
+        <button class="tab warn" data-filter="probable">🟡 À vérifier <span></span></button>
+        <button class="tab ok" data-filter="found">✅ Trouvés <span></span></button>
         <input type="text" id="filterText" placeholder="Filtrer…">
       </div>
-      <div class="results" id="results"></div>
+      <div class="results" id="results"><div class="empty"><span class="spinner"></span> Comparaison en cours…</div></div>
     </div>
-    <div id="compareLoading" class="empty hidden"><span class="spinner"></span> Comparaison en cours…</div>
-
-    <div class="nav">
-      <button data-goto="1">← Connexion</button>
-      <span class="spacer"></span>
-      <button class="primary" data-goto="3">Récupérer les manquants →</button>
-    </div>
+    <div class="nav"><button class="btn" data-go="2">← Retour</button><button class="btn primary" id="next3">J'ai téléchargé des morceaux, vérifier →</button></div>
   </section>
 
-  <!-- ================= STEP 3 ================= -->
-  <section class="step hidden" id="step3">
-    <p class="step-intro">Achète les morceaux manquants : dès qu'ils arrivent dans ton dossier de téléchargements,
-      ils sont reconnus et rangés sur ta clé. Télécharge ensuite le fichier à importer dans Rekordbox.</p>
-
-    <div class="panel">
-      <h2>📥 Dossier surveillé</h2>
-      <div class="state" id="dlState">…</div>
-      <div class="state warn hidden" id="dlWarning"></div>
-      <div class="row">
-        <button id="dlScan">🔄 Scanner maintenant</button>
-        <button id="dlSettingsBtn">⚙ Réglages</button>
-      </div>
-      <div id="dlSettings" class="hidden">
-        <div class="form-grid">
-          <label for="setDownloads">Dossier surveillé</label>
-          <input type="text" id="setDownloads" spellcheck="false">
-          <label for="setMusic">Ranger les morceaux dans</label>
-          <input type="text" id="setMusic" list="musicDirs" spellcheck="false" placeholder="/Volumes/NOM_DE_TA_CLE/Musique">
-          <span></span>
-          <label class="check"><input type="checkbox" id="setKeep"> garder l'original dans le dossier surveillé (copier plutôt que déplacer)</label>
-          <label for="setPlaylist">Playlist Rekordbox</label>
-          <input type="text" id="setPlaylist" list="rbPlaylists" spellcheck="false">
-          <span></span>
-          <label class="check"><input type="checkbox" id="setAuto"> ranger automatiquement les correspondances sûres ✅</label>
-          <label for="setXml">Copie du fichier d'import</label>
-          <input type="text" id="setXml" spellcheck="false">
-          <span></span>
-          <div><button id="setSave">Enregistrer</button></div>
+  <!-- STEP 4: recap -->
+  <section class="step" data-step="4" hidden>
+    <div class="panel stack">
+      <div class="spread">
+        <div>
+          <h2>Récapitulatif</h2>
+          <p class="lead">Fichiers audio trouvés dans <span id="recapDir">Téléchargements</span>, comparés aux morceaux manquants.</p>
         </div>
-        <datalist id="rbPlaylists"></datalist>
-        <datalist id="musicDirs"></datalist>
-        <p class="muted" id="musicHint"></p>
+        <button class="btn small" id="recheck">Revérifier</button>
       </div>
-      <div id="dlConfirm"></div>
-      <details id="dlUnmatchedBox" class="hidden">
-        <summary id="dlUnmatchedTitle"></summary>
-        <div id="dlUnmatched"></div>
-      </details>
+      <div id="recapBody"><div class="empty"><span class="spinner"></span> Vérification…</div></div>
     </div>
-
-    <div class="panel">
-      <h2>💿 Importer dans Rekordbox</h2>
-      <div id="pendingBox"></div>
-      <div class="row" style="margin-top:10px">
-        <button class="primary" id="xmlDownload" disabled>⬇ Télécharger le fichier XML à importer</button>
-      </div>
-      <details id="howto">
-        <summary>Comment l'importer dans Rekordbox</summary>
-        <p class="muted">Réglage à faire une seule fois :</p>
-        <ol class="howto">
-          <li>Rekordbox → Préférences → Affichage → Disposition : coche « rekordbox xml ».</li>
-          <li>Préférences → Avancé → Base de données → « Bibliothèque rekordbox xml » → Parcourir, et choisis le fichier
-            téléchargé. Astuce : choisis plutôt sa copie toujours à jour, qui ne change jamais de place :
-            <code id="xmlPath"></code> <button class="small" id="xmlPathCopy">Copier le chemin</button></li>
-        </ol>
-        <p class="muted">À chaque fois :</p>
-        <ol class="howto">
-          <li>Barre latérale → rekordbox xml → Listes de lecture (clique sur l'icône d'actualisation si besoin).</li>
-          <li>Clic droit sur « <span id="howtoPlaylist"></span> » → « Importer la liste de lecture ».</li>
-          <li>La playlist contient ses morceaux actuels + les nouveaux : rien n'est perdu.</li>
-        </ol>
-        <p class="muted">Les libellés peuvent varier légèrement selon ta version de Rekordbox.</p>
-      </details>
-    </div>
-
-    <div class="nav">
-      <button data-goto="2">← Résultats</button>
-    </div>
+    <div class="nav"><button class="btn" data-go="3">← Retour</button><button class="btn primary" id="startCopy" disabled>Lancer la copie →</button></div>
   </section>
-</main>
 
-<div class="toast" id="toast"></div>
+  <!-- STEP 5: transfer + XML -->
+  <section class="step" data-step="5" hidden>
+    <div class="panel stack">
+      <div>
+        <h2 id="copyTitle">Copie en cours…</h2>
+        <p class="lead" id="copyLead">Ne débranche pas la clé.</p>
+      </div>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="pbar"><i id="pfill"></i></div>
+      <ul class="tasks" id="tasks"></ul>
+      <div class="done-card" id="doneCard" hidden>
+        <div id="doneText"></div>
+        <div class="row">
+          <button class="btn primary" id="dlXml">Télécharger le fichier XML</button>
+          <button class="btn" id="restart">Recommencer</button>
+        </div>
+        <details id="howto">
+          <summary>Comment l'importer dans Rekordbox</summary>
+          <ol class="howto">
+            <li>Une seule fois : Préférences → Affichage → Disposition → coche « rekordbox xml » ; puis Préférences → Avancé → Base de données → « Bibliothèque rekordbox xml » → choisis sa copie toujours à jour, qui ne change pas de place :
+              <code id="xmlPath"></code> <button class="btn small" id="xmlPathCopy">Copier le chemin</button></li>
+            <li>À chaque fois : barre latérale → rekordbox xml → Listes de lecture (actualise si besoin) → clic droit sur « <span id="howtoPlaylist"></span> » → Importer la liste de lecture.</li>
+            <li>La playlist contient ses morceaux actuels + les nouveaux : rien n'est perdu.</li>
+          </ol>
+        </details>
+      </div>
+    </div>
+    <div class="nav"><button class="btn" data-go="4" id="back5">← Retour</button><span></span></div>
+  </section>
+</div>
+
+<!-- Settings -->
+<div class="overlay" id="settings" hidden>
+  <div class="panel stack" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <h2 id="settingsTitle">Réglages</h2>
+    <div class="form-grid">
+      <label for="setDownloads">Dossier Téléchargements</label>
+      <input type="text" id="setDownloads" spellcheck="false">
+      <label for="setMusic">Ranger les morceaux dans</label>
+      <input type="text" id="setMusic" list="musicDirs" spellcheck="false" placeholder="/Volumes/NOM_DE_TA_CLE/Musique">
+      <span></span>
+      <label class="check"><input type="checkbox" id="setKeep"> garder l'original dans Téléchargements (copier au lieu de déplacer)</label>
+      <label for="setPlaylist">Playlist Rekordbox</label>
+      <input type="text" id="setPlaylist" list="rbPlaylists" spellcheck="false" placeholder="même nom que la playlist Spotify">
+      <label for="setXml">Fichier d'import</label>
+      <input type="text" id="setXml" spellcheck="false">
+    </div>
+    <datalist id="rbPlaylists"></datalist>
+    <datalist id="musicDirs"></datalist>
+    <p class="note" id="musicHint"></p>
+    <div class="row"><button class="btn primary" id="setSave">Enregistrer</button><button class="btn" id="setCancel">Fermer</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
 
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-const state = { status: null, playlists: [], data: null, filter: "missing", text: "", step: 1, needsRefresh: false };
+const state = {
+  status: null, playlists: [], data: null, filter: "missing", text: "",
+  step: 1, recap: null, transfer: null,
+};
 
 // ---------- helpers --------------------------------------------------------
 function el(tag, attrs, ...children) {
@@ -354,10 +403,7 @@ async function busy(btn, fn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
   try { return await fn(); }
-  catch (e) {
-    toast(e.message, true);
-    if (e.code === "not_logged_in") refreshStatus();
-  }
+  catch (e) { toast(e.message, true); }
   finally { btn.disabled = false; btn.innerHTML = label; }
 }
 const mmss = (s) => s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : "";
@@ -365,225 +411,195 @@ const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
 const fold = (t) => (t || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const dateFr = (ts) => ts ? new Date(ts * 1000).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "";
 
-// ---------- wizard ---------------------------------------------------------
-function isReady() {
+// ---------- wizard navigation ----------------------------------------------
+function maxStep() {
   const s = state.status;
-  return !!(s && s.spotify.logged_in && s.library.count > 0);
+  if (!s || !s.spotify.logged_in || !$("plSelect").value) return 1;
+  if (!s.library.count) return 2;
+  if (!state.data) return 3;           // step 3 shows while the comparison runs
+  return state.transfer ? 5 : 4;      // step 5 only after "Lancer la copie"
 }
 function updateStepper() {
+  const max = maxStep();
   document.querySelectorAll("#stepper button").forEach((b) => {
-    const n = +b.dataset.step;
-    b.classList.toggle("current", n === state.step);
-    b.classList.toggle("done", n < state.step || (n === 1 && isReady()));
-    b.disabled = n > 1 && !isReady();
+    const k = +b.dataset.go;
+    b.classList.toggle("current", k === state.step);
+    b.classList.toggle("done", k < state.step);
+    b.disabled = k > max;
+    if (k === state.step) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
   });
 }
-function goto(step) {
-  if (step > 1 && !isReady()) step = 1;
-  state.step = step;
-  document.querySelectorAll(".step").forEach((s) => s.classList.toggle("hidden", s.id !== "step" + step));
+function go(n) {
+  if (n > maxStep()) return;
+  state.step = n;
+  document.querySelectorAll(".step").forEach((s) => (s.hidden = +s.dataset.step !== n));
   updateStepper();
-  if (location.hash !== "#etape-" + step) history.replaceState(null, "", "#etape-" + step);
   window.scrollTo(0, 0);
-  if (step === 2) enterStep2();
-  if (step === 3) scanDownloads();
+  if (n === 3) {
+    renderLibrary();
+    if (!state.data) compare(false);
+  }
+  if (n === 4) loadRecap();
 }
-document.querySelectorAll("#stepper button").forEach((b) => b.addEventListener("click", () => goto(+b.dataset.step)));
-document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => goto(+b.dataset.goto)));
-$("next1").addEventListener("click", () => goto(2));
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-go]");
+  if (t && !t.disabled) go(+t.dataset.go);
+});
 
-// ---------- step 1: Spotify + library ---------------------------------------
+// ---------- status / Spotify --------------------------------------------------
 async function refreshStatus() {
   const s = await api("/api/status");
   state.status = s;
-  if (s.library_auto_loaded) libraryAutoLoaded(s.library_auto_loaded);
   const sp = s.spotify;
-  const spState = $("spState");
-  if (!sp.client_id) {
-    spState.className = "state ko"; spState.textContent = "✗ App Spotify non configurée";
-  } else if (!sp.logged_in) {
-    spState.className = "state ko"; spState.textContent = "✗ Non connecté à Spotify";
-  } else {
-    spState.className = "state ok"; spState.textContent = `✓ Connecté à Spotify${sp.user ? " en tant que " + sp.user : ""}`;
-  }
+  const pill = $("spotifyPill");
+  pill.classList.toggle("on", sp.logged_in);
+  pill.lastElementChild.textContent = sp.logged_in
+    ? `Spotify connecté${sp.user ? " · " + sp.user : ""}` : "Spotify non connecté";
+  $("spLogin").hidden = sp.logged_in;
+  $("cidRow").hidden = sp.client_id;
+  $("loginLink").hidden = !sp.client_id;
   $("redirectUri").textContent = sp.redirect_uri;
-  $("cidRow").classList.toggle("hidden", sp.client_id);
-  $("loginLink").classList.toggle("hidden", !sp.client_id || sp.logged_in);
-  $("spTest").classList.toggle("hidden", !sp.logged_in);
-  $("logoutBtn").classList.toggle("hidden", !sp.logged_in);
-
-  const lib = s.library;
-  const libState = $("libState");
-  if (lib.count) {
-    libState.className = "state ok";
-    libState.textContent = `✓ ${lib.name || "rekordbox.xml"} : ${plural(lib.count, "morceau", "morceaux")}`
-      + (lib.read_tags ? `, ${lib.isrc} ISRC` : "") + (lib.loaded_at ? ` · chargé le ${dateFr(lib.loaded_at)}` : "")
-      + (lib.pending_import ? ` · + ${plural(lib.pending_import, "morceau copié", "morceaux copiés")} depuis` : "");
-    $("drop").querySelector("b").textContent = "Charger un export plus récent";
-  } else {
-    libState.className = "state ko";
-    libState.textContent = lib.path && !lib.available
-      ? "✗ Bibliothèque sur une clé USB non branchée" : "✗ Aucune bibliothèque chargée";
-  }
-  $("readTags").checked = !!lib.read_tags;
-  $("next1").disabled = !isReady();
+  $("plSelect").hidden = !sp.logged_in;
   updateStepper();
   return s;
 }
-
 $("cidSave").addEventListener("click", (e) => busy(e.currentTarget, async () => {
   await api("/api/client-id", { client_id: $("clientId").value });
   await refreshStatus();
 }));
-$("logoutBtn").addEventListener("click", (e) => busy(e.currentTarget, async () => {
-  await api("/api/logout", {});
-  state.playlists = [];
-  await refreshStatus();
-}));
-$("spTest").addEventListener("click", (e) => busy(e.currentTarget, async () => {
-  const pls = await api("/api/playlists");
-  state.playlists = pls;
-  const mine = pls.filter((p) => p.readable).length;
-  $("spState").className = "state ok";
-  $("spState").textContent = `✓ Connexion OK : ${plural(pls.length, "playlist", "playlists")}, dont ${mine} lisible${mine > 1 ? "s" : ""}`;
-}));
 
-async function uploadLibrary(file) {
-  if (!file) return;
-  const libState = $("libState");
-  libState.className = "state";
-  libState.replaceChildren(el("span", { class: "spinner" }), ` Chargement de ${file.name}…`);
-  try {
-    const lib = await api("/api/library/upload?read_tags=" + ($("readTags").checked ? "1" : "0"), file,
-      { "X-Filename": encodeURIComponent(file.name) });
-    toast(plural(lib.count, "morceau chargé", "morceaux chargés"));
-    state.needsRefresh = true;
-  } catch (e) {
-    toast(e.message, true);
-  }
-  await refreshStatus();
-}
-$("libFile").addEventListener("change", (e) => { uploadLibrary(e.target.files[0]); e.target.value = ""; });
-const drop = $("drop");
-["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
-["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove("over")));
-drop.addEventListener("drop", (e) => { e.preventDefault(); uploadLibrary(e.dataTransfer.files[0]); });
-// A file dropped next to the zone must not replace the page.
-window.addEventListener("dragover", (e) => e.preventDefault());
-window.addEventListener("drop", (e) => e.preventDefault());
-
-function libraryAutoLoaded(name) {
-  toast(`Bibliothèque Rekordbox mise à jour depuis Téléchargements : ${name}`);
-  state.needsRefresh = true;
-  if (state.step === 2) compare(false);
-}
-// Step 1: pick up a Rekordbox export dropped in the Downloads folder.
-setInterval(() => {
-  if (document.visibilityState === "visible" && state.step === 1) refreshStatus().catch(() => {});
-}, 8000);
-
-// ---------- step 2: results --------------------------------------------------
+// ---------- step 1: playlist ---------------------------------------------------
 function defaultPlaylistId(mine) {
   const chosen = state.status && state.status.default_playlist;
   if (chosen && mine.some((p) => p.id === chosen)) return chosen;
   const aMixer = mine.find((p) => fold(p.name) === "a mixer");
   return aMixer ? aMixer.id : (mine[0] && mine[0].id);
 }
-function updateDefaultBtn() {
-  const sel = $("plSelect").value;
-  const current = (state.status && state.status.default_playlist) || defaultPlaylistId(state.playlists.filter((p) => p.readable));
-  const isDefault = sel && sel === current;
-  $("defaultBtn").textContent = isDefault ? "★ Par défaut" : "☆ Par défaut";
-  $("defaultBtn").disabled = isDefault;
-}
 async function loadPlaylists() {
-  if (!state.playlists.length) state.playlists = await api("/api/playlists");
+  state.playlists = await api("/api/playlists");
   const sel = $("plSelect");
   sel.replaceChildren();
   const mine = state.playlists.filter((p) => p.readable);
   const others = state.playlists.filter((p) => !p.readable);
   const group = (label, list, disabled) => el("optgroup", { label },
     list.map((p) => el("option", { value: p.id, disabled },
-      `${p.name} (${p.tracks ?? "?"})` + (disabled ? ` – par ${p.owner}` : ""))));
+      disabled ? `${p.name} – par ${p.owner}` : `${p.name} (${p.tracks ?? "?"} tracks)`)));
   sel.append(group("Mes playlists", mine, false));
   if (others.length) sel.append(group("Abonnements (à dupliquer dans Spotify pour les comparer)", others, true));
   const def = defaultPlaylistId(mine);
   if (def) sel.value = def;
-  updateDefaultBtn();
+  $("next1").disabled = !sel.value;
 }
-async function enterStep2() {
+$("plSelect").addEventListener("change", () => { state.data = null; state.recap = null; state.transfer = null; updateStepper(); });
+$("next1").addEventListener("click", () => go(2));
+
+// ---------- step 2: library ------------------------------------------------------
+function exportError(msg) {
+  $("exportError").textContent = msg || "";
+  $("exportError").hidden = !msg;
+}
+async function afterLibrary() {
+  exportError("");
+  await refreshStatus();
+  state.data = null; state.recap = null; state.transfer = null;
+  $("results").replaceChildren(el("div", { class: "empty" }, el("span", { class: "spinner" }), " Comparaison en cours…"));
+  go(3);  // shown right away; the comparison fills it in
+}
+$("next2").addEventListener("click", (e) => busy(e.currentTarget, async () => {
   try {
-    if (!$("plSelect").querySelector("option[value]")) await loadPlaylists();
-    if (!state.data || state.needsRefresh) await compare(false);
-  } catch (e) { toast(e.message, true); }
+    await api("/api/library/from-downloads", {});
+  } catch (err) {
+    exportError(err.message);
+    return;
+  }
+  await afterLibrary();
+}));
+async function uploadLibrary(file) {
+  if (!file) return;
+  exportError("");
+  try {
+    await api("/api/library/upload", file, { "X-Filename": encodeURIComponent(file.name) });
+  } catch (err) { exportError(err.message); return; }
+  await afterLibrary();
 }
-$("plSelect").addEventListener("change", () => { updateDefaultBtn(); compare(false); });
-$("defaultBtn").addEventListener("click", (e) => busy(e.currentTarget, async () => {
-  const r = await api("/api/default-playlist", { playlist: $("plSelect").value });
-  state.status.default_playlist = r.default_playlist;
-  toast("Playlist ouverte par défaut au lancement");
-}).then(updateDefaultBtn));
+$("libFile").addEventListener("change", (e) => { uploadLibrary(e.target.files[0]); e.target.value = ""; });
+const drop = $("drop");
+["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove("over")));
+drop.addEventListener("drop", (e) => { e.preventDefault(); uploadLibrary(e.dataTransfer.files[0]); });
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => e.preventDefault());
+
+// ---------- step 3: library facts + missing tracks ------------------------------------------
+function renderLibrary() {
+  const lib = state.status && state.status.library;
+  if (!lib || !lib.count) return;
+  $("libName").textContent = lib.name || "rekordbox.xml";
+  const when = lib.exported_at ? dateFr(lib.exported_at) : dateFr(lib.loaded_at);
+  $("libWhere").textContent = lib.origin === "upload"
+    ? `fichier déposé · ${when}` : `trouvé dans Téléchargements · exporté le ${when}`;
+  $("factTracks").textContent = lib.count;
+  $("factKeyBox").hidden = !lib.key;
+  if (lib.key) {
+    $("factKey").textContent = lib.key.absent;
+    $("factKeyLbl").textContent = `tracks absents de la clé ${lib.key.name}`
+      + (lib.key.mounted ? "" : " (clé non branchée)");
+  }
+}
+$("reread").addEventListener("click", (e) => busy(e.currentTarget, async () => {
+  try { await api("/api/library/from-downloads", {}); }
+  catch (err) { toast(err.message, true); return; }
+  await refreshStatus();
+  renderLibrary();
+  await compare(false);
+  toast("Bibliothèque relue");
+}));
 
 async function compare(refresh) {
   const id = $("plSelect").value;
-  if (!id) return;
-  state.needsRefresh = false;
-  const firstLoad = !state.data || state.data.id !== id;
-  if (firstLoad) {
-    $("compareLoading").classList.remove("hidden");
-    $("resultsSection").classList.add("hidden");
-  }
-  const run = async () => {
-    state.data = await api("/api/compare", { playlist: id, refresh });
-    $("exportBtn").disabled = $("copyBtn").disabled = false;
-    if (firstLoad) state.filter = state.data.counts.missing ? "missing" : "all";
-    else if (state.filter === "missing" && !state.data.counts.missing) state.filter = "all";
-    render();
-  };
+  if (!id || state.comparing) return;
+  state.comparing = true;
   try {
-    if (refresh) await busy($("refreshBtn"), run);
-    else await run();
-  } catch (e) { toast(e.message, true); }
-  finally { $("compareLoading").classList.add("hidden"); }
+    state.data = await api("/api/compare", { playlist: id, refresh });
+  } catch (e) {
+    toast(e.message, true);
+    $("results").replaceChildren(el("div", { class: "empty" }, e.message));
+    return;
+  } finally { state.comparing = false; }
+  state.filter = state.data.counts.missing ? "missing" : (state.data.counts.probable ? "probable" : "found");
+  $("plName").textContent = state.data.name;
+  $("plCount").textContent = state.data.results.length;
+  render();
+  updateStepper();
 }
-$("refreshBtn").addEventListener("click", () => compare(true));
-$("exportBtn").addEventListener("click", () => {
-  if (state.data) window.location = "/api/export.csv?playlist=" + encodeURIComponent(state.data.id);
-});
-$("copyBtn").addEventListener("click", async () => {
+$("copyList").addEventListener("click", async () => {
+  if (!state.data) return;
   const lines = state.data.results.filter((r) => r.status === "missing").map((r) => r.spotify.display);
   try { await copyText(lines.join("\n")); toast(plural(lines.length, "morceau copié", "morceaux copiés")); }
   catch { toast("Copie impossible", true); }
 });
-
-document.querySelectorAll("#tabs .tab").forEach((t) => t.addEventListener("click", () => {
-  state.filter = t.dataset.filter;
-  render();
-}));
+$("exportCsv").addEventListener("click", () => {
+  if (state.data) window.location = "/api/export.csv?playlist=" + encodeURIComponent(state.data.id);
+});
+document.querySelectorAll("#tabs .tab").forEach((t) => t.addEventListener("click", () => { state.filter = t.dataset.filter; render(); }));
 $("filterText").addEventListener("input", (e) => { state.text = e.target.value.toLowerCase(); render(); });
 
 function render() {
   const d = state.data;
   if (!d) return;
-  $("resultsSection").classList.remove("hidden");
   const c = { found: 0, probable: 0, missing: 0 };
   for (const r of d.results) c[r.status]++;
-  const totals = { ...c, all: d.results.length };
+  $("factMissing").textContent = c.missing;
   document.querySelectorAll("#tabs .tab").forEach((t) => {
-    t.querySelector("span").textContent = totals[t.dataset.filter];
+    t.querySelector("span").textContent = c[t.dataset.filter];
     t.classList.toggle("active", t.dataset.filter === state.filter);
   });
-  const order = { missing: 0, probable: 1, found: 2 };
   const list = d.results
-    .filter((r) => state.filter === "all" || r.status === state.filter)
-    .filter((r) => !state.text ||
-      (r.spotify.display + " " + (r.match ? r.match.display : "")).toLowerCase().includes(state.text))
-    .sort((a, b) => state.filter === "all" ? order[a.status] - order[b.status] : 0);
+    .filter((r) => r.status === state.filter)
+    .filter((r) => !state.text || (r.spotify.display + " " + (r.match ? r.match.display : "")).toLowerCase().includes(state.text));
   $("results").replaceChildren(...(list.length ? list.map(card)
     : [el("div", { class: "empty" }, state.text ? "Aucun résultat pour ce filtre." : "Rien dans cette catégorie.")]));
 }
-
-const ICON = { found: "✅", probable: "🟡", missing: "❌" };
 
 function card(r) {
   const c = el("div", { class: "card " + r.status });
@@ -600,50 +616,41 @@ function card(r) {
         },
       }, r.spotify.display)
     : el("span", { class: "sp" }, r.spotify.display);
-  c.append(el("div", { class: "line1" },
-    el("span", {}, ICON[r.status]), spTitle,
+  c.append(el("div", { class: "line1" }, spTitle,
     el("span", { class: "muted" }, mmss(r.spotify.duration)),
     r.method === "import" ? el("span", { class: "badge import" }, "📥 téléchargé")
       : r.method === "manuel" ? el("span", { class: "badge manual" }, "choisi par toi")
-      : r.match ? el("span", { class: "badge" }, `${r.method === "ISRC" ? "ISRC" : "score"} ${Math.round(r.score)}`) : null,
-  ));
-  if (r.match) {
-    c.append(el("div", { class: "rb", title: r.match.location || "" },
-      el("span", { class: "arrow" }, "→ "), r.match.display,
-      el("span", { class: "muted" }, "  " + mmss(r.match.duration))));
-  }
+      : r.match ? el("span", { class: "badge" }, `${r.method === "ISRC" ? "ISRC" : "score"} ${Math.round(r.score)}`) : null));
+  if (r.match) c.append(el("div", { class: "rb", title: r.match.location || "" }, "→ ", r.match.display,
+    el("span", { class: "muted" }, "  " + mmss(r.match.duration))));
   if (r.notes.length) c.append(el("ul", { class: "notes" }, r.notes.map((n) => el("li", {}, n))));
 
   const actions = el("div", { class: "actions" });
-  const act = (label, action, libKey, cls = "small") =>
-    el("button", { class: cls, onclick: (e) => decide(e.currentTarget, r.key, action, libKey) }, label);
-  if (r.status === "probable") {
-    actions.append(act("✓ C'est bien lui", "confirm", r.match.key), act("✗ Ce n'est pas lui", "reject", r.match.key));
-  } else if (r.status === "found" && r.method !== "manuel" && r.method !== "import") {
-    actions.append(act("✗ Pas le bon morceau", "reject", r.match.key));
-  }
+  const act = (label, action, libKey) =>
+    el("button", { class: "btn small", onclick: (e) => decide(e.currentTarget, r.key, action, libKey) }, label);
+  if (r.status === "probable") actions.append(act("✓ C'est bien lui", "confirm", r.match.key), act("✗ Ce n'est pas lui", "reject", r.match.key));
+  else if (r.status === "found" && r.method !== "manuel" && r.method !== "import") actions.append(act("✗ Pas le bon morceau", "reject", r.match.key));
   if (r.status === "missing" && r.alternatives.length) {
     actions.append(el("span", { class: "muted" }, "C'est peut-être :"));
-    for (const a of r.alternatives) actions.append(act(`${a.display} (${Math.round(a.score)})`, "confirm", a.key, "small alt"));
+    for (const a of r.alternatives) actions.append(act(`${a.display} (${Math.round(a.score)})`, "confirm", a.key));
   }
-  const searchBtn = el("button", { class: "small" }, r.status === "missing" ? "🔍 Je l'ai, le chercher…" : "🔍 Choisir un autre…");
+  const searchBtn = el("button", { class: "btn small" }, r.status === "missing" ? "🔍 Je l'ai, le chercher…" : "🔍 Choisir un autre…");
   actions.append(searchBtn);
   if (r.decided) actions.append(act("↺ Annuler mes choix", "reset", null));
-  if (r.status !== "found") {
-    actions.append(el("a", { href: r.links.beatport, target: "_blank", rel: "noopener", class: "muted" }, "Beatport"),
-      el("a", { href: r.links.bandcamp, target: "_blank", rel: "noopener", class: "muted" }, "Bandcamp"));
-  }
+  if (r.status !== "found") actions.append(
+    el("a", { href: r.links.beatport, target: "_blank", rel: "noopener", class: "muted" }, "Beatport"),
+    el("a", { href: r.links.bandcamp, target: "_blank", rel: "noopener", class: "muted" }, "Bandcamp"));
   c.append(actions);
 
-  const sbox = el("div", { class: "search-box hidden" });
+  const sbox = el("div", { class: "search-box", hidden: true });
   const input = el("input", { type: "text", placeholder: "Titre ou artiste dans Rekordbox…" });
-  const hits = el("div", { class: "search-results" });
+  const hits = el("div", { class: "search-box" });
   sbox.append(input, hits);
   c.append(sbox);
   let timer;
   searchBtn.addEventListener("click", () => {
-    sbox.classList.toggle("hidden");
-    if (!sbox.classList.contains("hidden")) {
+    sbox.hidden = !sbox.hidden;
+    if (!sbox.hidden) {
       if (!input.value) input.value = r.spotify.title.replace(/\s+-\s+.*$/, "");
       input.focus();
       input.dispatchEvent(new Event("input"));
@@ -656,159 +663,205 @@ function card(r) {
         const res = await api("/api/search?q=" + encodeURIComponent(input.value));
         hits.replaceChildren(...(res.length ? res.map((t) => el("div", { class: "hit" },
           el("span", {}, t.display, el("span", { class: "muted" }, "  " + mmss(t.duration))),
-          el("button", { class: "small", onclick: (e) => decide(e.currentTarget, r.key, "confirm", t.key) }, "C'est celui-là")))
+          el("button", { class: "btn small", onclick: (e) => decide(e.currentTarget, r.key, "confirm", t.key) }, "C'est celui-là")))
           : [el("div", { class: "muted" }, "Aucun morceau trouvé.")]));
       } catch (e) { toast(e.message, true); }
     }, 200);
   });
   return c;
 }
-
 async function decide(btn, spotifyKey, action, libraryKey) {
   await busy(btn, async () => {
     const updated = await api("/api/decision", { spotify_key: spotifyKey, action, library_key: libraryKey });
     const i = state.data.results.findIndex((r) => r.key === spotifyKey);
     state.data.results[i] = updated;
+    state.recap = null;
     render();
     toast({ confirm: "Association enregistrée", reject: "Candidat écarté", reset: "Choix annulés" }[action]);
   });
 }
+$("next3").addEventListener("click", () => go(4));
 
-// ---------- step 3: downloads -> USB key -> Rekordbox ------------------------
-const dl = { settings: null, scanning: false, lastRender: "" };
+// ---------- step 4: recap -------------------------------------------------------
+async function loadRecap() {
+  const body = $("recapBody");
+  body.replaceChildren(el("div", { class: "empty" }, el("span", { class: "spinner" }), " Vérification…"));
+  $("startCopy").disabled = true;
+  try {
+    state.recap = await api("/api/recap?playlist=" + encodeURIComponent($("plSelect").value));
+  } catch (e) {
+    body.replaceChildren(el("div", { class: "msg ko" }, e.message));
+    return;
+  }
+  state.recap.matches.forEach((m) => (m.on = true));
+  renderRecap();
+}
+$("recheck").addEventListener("click", (e) => busy(e.currentTarget, loadRecap));
 
-function fillSettings(st) {
-  dl.settings = st;
+function renderRecap() {
+  const r = state.recap;
+  $("recapDir").textContent = r.downloads_dir;
+  const n = r.matches.length;
+  const pct = r.missing ? Math.min(100, (n / r.missing) * 100) : 0;
+  const dest = r.destination;
+  const verb = dest.keep_original ? "copiés (l'original reste dans Téléchargements)" : "déplacés (ils quittent Téléchargements)";
+  const keyName = (dest.volume || "").split("/").pop();
+  const parts = [
+    el("div", { class: "stack", style: "gap:8px" },
+      el("div", { class: "ratio" }, el("span", { class: "big" }, n), el("span", { class: "of" }, `/ ${r.missing} manquants retrouvés`)),
+      el("div", { class: "meter", "aria-hidden": "true" }, el("i", { style: `width:${pct}%` }))),
+  ];
+  if (n) {
+    const rows = r.matches.map((m, i) => {
+      const cb = el("input", { type: "checkbox", id: "m" + i, "aria-label": "Inclure " + m.name });
+      cb.checked = m.on;
+      cb.addEventListener("change", () => { m.on = cb.checked; updateStart(); });
+      return el("tr", {},
+        el("td", {}, cb),
+        el("td", { class: "file" }, m.name),
+        el("td", {}, m.spotify),
+        el("td", {}, el("span", { class: "status " + m.status },
+          m.status === "found" ? `✅ sûr · ${Math.round(m.score)}` : `🟡 à vérifier · ${Math.round(m.score)}`),
+          m.notes.length ? el("div", { class: "note" }, m.notes.join(" · ")) : null));
+    });
+    parts.push(el("div", { class: "tablewrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Fichier dans Téléchargements"), el("th", {}, "Morceau manquant"), el("th", {}, "Correspondance"))),
+      el("tbody", {}, rows))));
+  } else {
+    parts.push(el("p", { class: "lead" }, "Aucun fichier de Téléchargements ne correspond aux morceaux manquants pour l'instant. Télécharge-les, puis clique sur Revérifier."));
+  }
+  if (r.unmatched.length) parts.push(el("details", {},
+    el("summary", {}, plural(r.unmatched.length, "fichier audio non reconnu", "fichiers audio non reconnus")),
+    el("div", { class: "note" }, r.unmatched.map((u) => u.name).join(" · "), " · ils resteront dans Téléchargements.")));
+  if (r.still_missing.length) parts.push(el("details", {},
+    el("summary", {}, plural(r.still_missing.length, "morceau toujours manquant", "morceaux toujours manquants")),
+    el("div", { class: "note" }, r.still_missing.join(" · "))));
+  parts.push(dest.available
+    ? el("div", { class: "dest" }, "Destination : ", el("code", {}, dest.music_dir),
+        keyName ? ` · clé ${keyName} branchée ✓` : "", ` · les fichiers seront ${verb}.`)
+    : el("div", { class: "msg warn" }, `⚠ La clé « ${keyName} » n'est pas branchée : branche-la, puis clique sur Revérifier. Destination : `, el("code", {}, dest.music_dir)));
+  $("recapBody").replaceChildren(el("div", { class: "stack" }, parts));
+  updateStart();
+}
+function updateStart() {
+  const r = state.recap;
+  const k = r && r.matches ? r.matches.filter((m) => m.on).length : 0;
+  $("startCopy").textContent = `Lancer la copie (${plural(k, "fichier", "fichiers")}) →`;
+  $("startCopy").disabled = !k || !r.destination.available;
+}
+
+// ---------- step 5: transfer with progress, then XML --------------------------------
+$("startCopy").addEventListener("click", runTransfer);
+async function runTransfer() {
+  if (!state.recap || !state.recap.matches) return;
+  const sel = state.recap.matches.filter((m) => m.on);
+  state.transfer = { done: false };
+  go(5);
+  $("back5").disabled = true;
+  $("doneCard").hidden = true;
+  $("copyTitle").textContent = "Copie en cours…";
+  $("copyLead").textContent = "Ne débranche pas la clé.";
+  const steps = [...sel.map((m) => `Copie de ${m.name}`), "Génération du fichier XML"];
+  const lis = steps.map((s) => el("li", {}, el("span", { class: "ic" }, "○"), el("span", { class: "t" }, s)));
+  $("tasks").replaceChildren(...lis);
+  const setPct = (i) => {
+    const pct = Math.round((i / steps.length) * 100);
+    $("pfill").style.width = pct + "%";
+    $("pbar").setAttribute("aria-valuenow", pct);
+  };
+  const mark = (li, cls, icon, extra) => {
+    li.className = cls;
+    li.querySelector(".ic").textContent = icon;
+    if (extra) li.querySelector(".t").append(el("span", { class: "muted" }, " · " + extra));
+  };
+  setPct(0);
+  let ok = 0;
+  for (let i = 0; i < sel.length; i++) {
+    mark(lis[i], "run", "◐");
+    try {
+      await api("/api/import", { source: sel[i].source, spotify_key: sel[i].spotify_key });
+      mark(lis[i], "ok", "✓");
+      ok++;
+    } catch (e) {
+      mark(lis[i], "err", "✗", e.message);
+    }
+    setPct(i + 1);
+  }
+  const last = lis[lis.length - 1];
+  mark(last, "run", "◐");
+  try {
+    const x = await api("/api/import-xml", {});
+    mark(last, "ok", "✓");
+    setPct(steps.length);
+    const dest = state.recap.destination.music_dir;
+    $("copyTitle").textContent = "Terminé";
+    $("copyLead").textContent = `${plural(ok, "fichier rangé", "fichiers rangés")} dans ${dest}`
+      + (ok < sel.length ? ` · ${sel.length - ok} en erreur` : "") + ".";
+    $("doneText").replaceChildren(el("b", {}, "compare2mix-import.xml"),
+      ` est prêt : playlist « ${x.playlist} » avec ses ${x.existing} morceaux actuels + `, el("b", {}, x.new),
+      ` nouveau${x.new > 1 ? "x" : ""}.`);
+    $("xmlPath").textContent = x.path;
+    $("howtoPlaylist").textContent = x.playlist;
+    $("doneCard").hidden = false;
+  } catch (e) {
+    mark(last, "err", "✗", e.message);
+    $("copyTitle").textContent = ok ? "Copie terminée, fichier XML non généré" : "Rien n'a été copié";
+    $("copyLead").textContent = e.message;
+  }
+  state.transfer.done = true;
+  $("back5").disabled = false;
+  // The comparison changed: transferred tracks are now found.
+  state.recap = null;
+  compare(false).then(() => updateStepper());
+}
+$("dlXml").addEventListener("click", () => { window.location = "/api/import.xml"; });
+$("xmlPathCopy").addEventListener("click", async () => {
+  try { await copyText($("xmlPath").textContent); toast("Chemin copié"); } catch (e) { toast(e.message, true); }
+});
+$("restart").addEventListener("click", () => { state.recap = null; state.transfer = null; go(1); });
+
+// ---------- settings ---------------------------------------------------------
+async function openSettings() {
+  const st = await api("/api/import-settings");
   $("setDownloads").value = st.downloads_dir;
   $("setMusic").value = st.music_dir;
   $("setKeep").checked = !!st.keep_original;
   $("setPlaylist").value = st.import_playlist;
-  $("setAuto").checked = !!st.auto_import;
   $("setXml").value = st.import_xml;
   $("rbPlaylists").replaceChildren(...st.rekordbox_playlists.map((n) => el("option", { value: n })));
   $("musicDirs").replaceChildren(...st.suggested_music_dirs.map((d) => el("option", { value: d })));
   $("musicHint").textContent = st.suggested_music_dirs.length
-    ? `Suggestion : ${st.suggested_music_dirs[0]} (là où se trouve déjà l'essentiel de ta collection Rekordbox).` : "";
-  $("xmlPath").textContent = st.import_xml;
-  $("howtoPlaylist").textContent = st.import_playlist;
+    ? `Suggestion pour le rangement : ${st.suggested_music_dirs[0]} (là où se trouve déjà l'essentiel de ta collection).` : "";
+  $("settings").hidden = false;
+  $("setDownloads").focus();
 }
-$("dlSettingsBtn").addEventListener("click", () => $("dlSettings").classList.toggle("hidden"));
+$("settingsBtn").addEventListener("click", () => openSettings().catch((e) => toast(e.message, true)));
+$("setCancel").addEventListener("click", () => ($("settings").hidden = true));
+$("settings").addEventListener("click", (e) => { if (e.target === $("settings")) $("settings").hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("settings").hidden = true; });
 $("setSave").addEventListener("click", (e) => busy(e.currentTarget, async () => {
-  fillSettings(await api("/api/import-settings", {
+  await api("/api/import-settings", {
     downloads_dir: $("setDownloads").value, music_dir: $("setMusic").value,
-    keep_original: $("setKeep").checked, import_xml: $("setXml").value,
-    import_playlist: $("setPlaylist").value, auto_import: $("setAuto").checked,
-  }));
-  $("dlSettings").classList.add("hidden");
-  dl.lastRender = "";
+    keep_original: $("setKeep").checked, import_playlist: $("setPlaylist").value, import_xml: $("setXml").value,
+  });
+  $("settings").hidden = true;
   toast("Réglages enregistrés");
-  scanDownloads();
+  await refreshStatus();
+  if (state.step === 3 && state.status.library.count) renderLibrary();
+  if (state.step === 4) loadRecap();
 }));
-$("dlScan").addEventListener("click", (e) => busy(e.currentTarget, () => scanDownloads(true)));
-$("xmlPathCopy").addEventListener("click", async () => {
-  try { await copyText($("xmlPath").textContent); toast("Chemin copié"); } catch (e) { toast(e.message, true); }
-});
-$("xmlDownload").addEventListener("click", () => { window.location = "/api/import.xml"; });
-
-async function scanDownloads(manual = false) {
-  if (dl.scanning || state.step !== 3) return;
-  dl.scanning = true;
-  try {
-    // The missing tracks are those of the playlist compared at step 2.
-    if (!state.data) await enterStep2();
-    const d = await api("/api/downloads");
-    if (d.library_auto_loaded) { libraryAutoLoaded(d.library_auto_loaded); await refreshStatus(); }
-    if (!dl.settings || $("dlSettings").classList.contains("hidden")) fillSettings(d.settings);
-    renderDownloads(d);
-    if (d.imported_now.length) {
-      state.needsRefresh = true;
-      toast(d.imported_now.length === 1 ? `Rangé sur la clé : ${d.imported_now[0]}`
-        : `${d.imported_now.length} morceaux rangés sur la clé`);
-    } else if (manual) {
-      toast(d.to_confirm.length ? "Des fichiers attendent ta confirmation" : "Rien de nouveau");
-    }
-  } catch (e) {
-    if (manual) toast(e.message, true);
-  } finally { dl.scanning = false; }
-}
-
-function renderDownloads(d) {
-  // Scanned every 8 s: redraw only when something changed (keeps open sections, scroll…).
-  const signature = JSON.stringify([d.watching, d.missing, d.can_import, d.to_confirm, d.pending, d.unmatched, d.settings]);
-  if (signature === dl.lastRender) return;
-  dl.lastRender = signature;
-
-  const action = d.settings.keep_original ? "copiés" : "déplacés";
-  $("dlState").replaceChildren(
-    el("div", {}, "Surveillé : ", el("code", {}, d.watching), " · " + (d.missing
-      ? plural(d.missing, "morceau manquant recherché", "morceaux manquants recherchés")
-      : "aucun morceau manquant à rechercher") + " · vérifié toutes les 8 secondes"),
-    el("div", {}, `Les morceaux reconnus sont ${action} vers : `, el("code", {}, d.settings.music_dir),
-      d.settings.keep_original ? el("span", { class: "muted" }, " (l'original reste dans le dossier surveillé)") : null));
-  const warn = $("dlWarning");
-  warn.classList.toggle("hidden", d.can_import);
-  if (!d.can_import) {
-    const key = (d.settings.music_volume || "").split("/").pop();
-    warn.textContent = `⚠ La clé « ${key} » n'est pas branchée : les fichiers restent dans le dossier surveillé `
-      + "et seront rangés automatiquement dès que tu la brancheras.";
-  }
-
-  $("dlConfirm").replaceChildren(...d.to_confirm.map((c) => el("div", { class: "item" },
-    el("div", { class: "what" },
-      el("div", {}, c.score >= 90 ? "✅ " : "🟡 ", el("b", {}, c.name)),
-      el("div", { class: "muted" }, `→ ${c.spotify.display}  (score ${Math.round(c.score)})`
-        + (c.notes.length ? " · " + c.notes.join(" · ") : ""))),
-    el("div", { class: "row" },
-      el("button", { class: "small primary", disabled: !d.can_import, onclick: (e) => busy(e.currentTarget, async () => {
-        await api("/api/import", { source: c.source, spotify_key: c.spotify_key });
-        state.needsRefresh = true;
-        toast(`Rangé sur la clé : ${c.spotify.display}`);
-        dl.lastRender = "";
-        await scanDownloads();
-      }) }, "Ranger sur la clé"),
-      el("button", { class: "small", onclick: (e) => busy(e.currentTarget, async () => {
-        await api("/api/ignore", { source: c.source });
-        await scanDownloads();
-      }) }, "Ignorer")))));
-
-  const um = d.unmatched;
-  $("dlUnmatchedBox").classList.toggle("hidden", !um.length);
-  $("dlUnmatchedTitle").textContent = plural(um.length, "fichier audio récent non reconnu", "fichiers audio récents non reconnus");
-  $("dlUnmatched").replaceChildren(...um.map((u) => el("div", { class: "item" },
-    el("span", { class: "what" }, u.name),
-    el("button", { class: "small", onclick: (e) => busy(e.currentTarget, async () => {
-      await api("/api/ignore", { source: u.source });
-      await scanDownloads();
-    }) }, "Ignorer"))));
-
-  const pending = d.pending;
-  $("pendingBox").replaceChildren(pending.length
-    ? el("div", {},
-        el("div", {}, el("span", { class: "big-count" }, pending.length), " ",
-          `${pending.length > 1 ? "nouveaux morceaux prêts" : "nouveau morceau prêt"} pour la playlist « ${d.settings.import_playlist} »`),
-        el("p", {}, `${d.settings.keep_original ? "Copiés" : "Déplacés"} dans `, el("code", {}, d.settings.music_dir), " :"),
-        el("ul", { class: "notes" }, pending.map((p) => el("li", { title: p.file },
-          p.spotify, el("span", { class: "muted" }, "  → " + p.name)))))
-    : el("p", {}, "Aucun nouveau morceau pour l'instant. Ils apparaîtront ici dès qu'ils seront rangés sur ta clé."));
-  $("xmlDownload").disabled = !pending.length;
-  $("xmlDownload").textContent = pending.length
-    ? `⬇ Télécharger le fichier XML à importer (${plural(pending.length, "morceau", "morceaux")})`
-    : "⬇ Télécharger le fichier XML à importer";
-}
-
-// Watch the downloads folder while step 3 is shown.
-setInterval(() => { if (document.visibilityState === "visible" && state.step === 3) scanDownloads(); }, 8000);
 
 // ---------- start ----------------------------------------------------------
 (async () => {
   const params = new URLSearchParams(location.search);
   if (params.get("login_error")) toast(params.get("login_error"), true);
   else if (params.get("login") === "ok") toast("Connecté à Spotify");
-  if (params.toString()) history.replaceState(null, "", "/" + location.hash);
-  try { await refreshStatus(); } catch (e) { toast(e.message, true); }
-  // Everything ready: go straight to the results (or to the step in the URL).
-  const fromHash = +(location.hash.match(/etape-(\d)/) || [])[1];
-  goto(isReady() ? (fromHash || 2) : 1);
+  if (params.toString()) history.replaceState(null, "", "/");
+  try {
+    await refreshStatus();
+    if (state.status.spotify.logged_in) await loadPlaylists();
+  } catch (e) { toast(e.message, true); }
+  go(1);
 })();
 </script>
 </body>

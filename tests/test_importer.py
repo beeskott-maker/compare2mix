@@ -167,50 +167,67 @@ def env(tmp_path, monkeypatch):
     httpd.server_close()
 
 
-def test_auto_import_end_to_end(env):
+def test_recap_then_transfer_then_xml(env):
     tmp, app, call = env
     make_wav(tmp / "Downloads" / "whatever.wav", title="Some Unknown Track", artist="Nobody")
     make_wav(tmp / "Downloads" / "Random Artist - Random Song.wav")
+    pid = "1xZn2Qs4ytrn5EfOGJDxft"
 
-    d = call("/api/downloads")
-    assert d["imported_now"] == ["Nobody – Some Unknown Track"]
-    assert [u["name"] for u in d["unmatched"]] == ["Random Artist - Random Song.wav"]
-    assert len(d["pending"]) == 1
+    # Step 4: recap only, nothing is moved.
+    r = call(f"/api/recap?playlist={pid}")
+    assert r["missing"] == 1 and r["still_missing"] == []
+    assert [(m["name"], m["status"], m["spotify"]) for m in r["matches"]] == \
+        [("whatever.wav", "found", "Nobody – Some Unknown Track")]
+    assert [u["name"] for u in r["unmatched"]] == ["Random Artist - Random Song.wav"]
+    assert r["destination"]["keep_original"] is False
+    assert (tmp / "Downloads" / "whatever.wav").exists()
+
+    # Step 5: transfer the chosen file, then build the XML.
+    m = r["matches"][0]
+    assert call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"]}) == \
+        {"imported": "Nobody – Some Unknown Track"}
     moved = tmp / "Music" / "whatever.wav"
     assert moved.exists() and not (tmp / "Downloads" / "whatever.wav").exists()
-
-    # The track is now found, flagged as downloaded.
-    res = {r["key"]: r for r in call("/api/compare", {"playlist": "1xZn2Qs4ytrn5EfOGJDxft"})["results"]}
-    assert res["spotify:track:9"]["status"] == "found"
-    assert res["spotify:track:9"]["method"] == "import"
-
-    # Import XML: designated playlist keeps its existing tracks + the new one.
-    pl = rekordbox.load_xml_playlists(d["settings"]["import_xml"])["Warm up"]
+    x = call("/api/import-xml", {})
+    assert (x["playlist"], x["existing"], x["new"]) == ("Warm up", 2, 1)
+    pl = rekordbox.load_xml_playlists(x["path"])["Warm up"]
     assert [t.title for t in pl] == ["Strobe", "Losing It", "Some Unknown Track"]
     assert pl[-1].location == str(moved)
 
-    # Nothing new on the next scan; ignoring the unrelated file hides it.
-    call("/api/ignore", {"source": d["unmatched"][0]["source"]})
-    d2 = call("/api/downloads")
-    assert d2["imported_now"] == [] and d2["unmatched"] == []
+    # The track now shows as found, flagged as downloaded; the recap no longer lists it.
+    res = {r["key"]: r for r in call("/api/compare", {"playlist": pid})["results"]}
+    assert res["spotify:track:9"]["status"] == "found" and res["spotify:track:9"]["method"] == "import"
+    assert call(f"/api/recap?playlist={pid}")["matches"] == []
 
-    # Once the file is in a new Rekordbox export, it is no longer pending.
+    # Once the file is in a new Rekordbox export, there is nothing left to import.
     app.collection.append(Track("Some Unknown Track", ["Nobody"], location=str(moved)))
     app._rebuild_library()
-    assert call("/api/downloads")["pending"] == []
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call("/api/import-xml", {})
+    assert e.value.code == 404
 
 
-def test_manual_confirmation_when_auto_import_off(env):
+def test_doubtful_match_is_listed_as_probable(env):
     tmp, app, call = env
-    call("/api/import-settings", {"auto_import": False})
-    make_wav(tmp / "Downloads" / "Nobody - Some Unknown Track.wav")
-    d = call("/api/downloads")
-    assert d["imported_now"] == [] and len(d["to_confirm"]) == 1
-    c = d["to_confirm"][0]
-    assert c["spotify_key"] == "spotify:track:9"
-    r = call("/api/import", {"source": c["source"], "spotify_key": c["spotify_key"]})
-    assert r["imported"] == "Nobody – Some Unknown Track"
-    assert call("/api/downloads")["to_confirm"] == []
+    make_wav(tmp / "Downloads" / "Nobody - Some Unknown Track (Live).wav")
+    r = call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")
+    assert [(m["status"], m["spotify_key"]) for m in r["matches"]] == [("probable", "spotify:track:9")]
+    assert any("live" in n for n in r["matches"][0]["notes"])
+
+
+def test_import_playlist_defaults_to_spotify_name(tmp_path):
+    from test_web import FakeSpotify
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"client_id": "abc", "downloads_dir": str(tmp_path / "Downloads"),
+                               "music_dir": str(tmp_path / "Music"),
+                               "import_xml": str(tmp_path / "import.xml")}))
+    app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
+                  spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
+    app.load_library(str(FIX / "rekordbox_sample.xml"))
+    app.compare("1xZn2Qs4ytrn5EfOGJDxft")
+    src = make_wav(tmp_path / "Downloads" / "x.wav", title="Some Unknown Track", artist="Nobody")
+    app.import_download(str(src), "spotify:track:9")
+    assert app.build_import_xml()["playlist"] == "À mixer"
 
 
 # ---- Rekordbox export dropped in Downloads ------------------------------------
@@ -258,7 +275,21 @@ def test_library_picked_up_from_downloads(tmp_path, monkeypatch):
 
     # A newer export replaces it; scan_downloads reports it.
     newer = _drop_export(tmp_path / "Downloads", "rekordbox (1).xml", age=10)
-    assert app.scan_downloads()["library_auto_loaded"] == "rekordbox (1).xml"
+    st = app.library_from_downloads()
+    assert st["just_loaded"] == "rekordbox (1).xml" and st["origin"] == "downloads"
+    # Nothing new: the current library is kept, no error.
+    assert app.library_from_downloads()["just_loaded"] is None
+
+
+def test_library_from_downloads_without_export(tmp_path):
+    from test_web import FakeSpotify
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"client_id": "abc", "downloads_dir": str(tmp_path / "Downloads")}))
+    app = web.App(port=0, config_path=cfg, decisions=DecisionStore(tmp_path / "d.json"),
+                  spotify_factory=FakeSpotify, imports=importer.ImportLog(tmp_path / "i.json"))
+    with pytest.raises(web.ApiError) as e:
+        app.library_from_downloads()
+    assert e.value.code == "no_export"
 
 
 def test_old_export_does_not_replace_newer_library(tmp_path):
@@ -273,3 +304,16 @@ def test_old_export_does_not_replace_newer_library(tmp_path):
     _drop_export(tmp_path / "Downloads", age=7 * 86400)
     assert app.check_downloads_for_library() is None
     assert app.library_status()["name"] == "cle.xml"
+
+
+def test_untagged_file_described_with_spotify_metadata(tmp_path):
+    log = importer.ImportLog(tmp_path / "i.json")
+    sp = Track("Make Regal Great Again", ["ACIDBOY", "Regal"], 300, isrc="QZ1", album="EP",
+               source_id="spotify:track:r")
+    untagged = make_wav(tmp_path / "dl" / "Make Regal Great Again - ACIDBOY.wav")
+    e = log.import_file(importer.read_audio_track(untagged), sp, tmp_path / "music")
+    assert (e.title, e.artists, e.isrc, e.album) == ("Make Regal Great Again", ["ACIDBOY", "Regal"], "QZ1", "EP")
+    # Tags present: they are kept.
+    tagged = make_wav(tmp_path / "dl" / "x.wav", title="Make Regal Great Again (Extended)", artist="ACIDBOY")
+    e = log.import_file(importer.read_audio_track(tagged), sp, tmp_path / "music")
+    assert (e.title, e.artists) == ("Make Regal Great Again (Extended)", ["ACIDBOY"])

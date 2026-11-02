@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import json
+from collections import Counter
 import os
 import threading
 import time
@@ -107,6 +108,7 @@ class App:
         # What we match against: the collection + files imported since the export.
         self.library: list[Track] = []
         self._file_cache: dict[tuple[str, float, int], Track] = {}
+        self._last_playlist_name: str | None = None
         self.isrc_count = 0
         self.read_tags = False
         self.loaded_at: float | None = None
@@ -162,7 +164,7 @@ class App:
         tmp.replace(dest)
         self.load_library(str(dest), read_tags)
         config.update(self.config_path, library_name=filename or "rekordbox.xml",
-                      library_source_mtime=time.time())
+                      library_source_mtime=time.time(), library_origin="upload")
         return self.library_status()
 
     def check_downloads_for_library(self) -> str | None:
@@ -189,8 +191,49 @@ class App:
                     return None  # not newer than the library already loaded
             self.upload_library(found.read_bytes(), found.name, bool(s.get("read_tags")))
             config.update(self.config_path, library_source=signature,
-                          library_source_mtime=st.st_mtime)
+                          library_source_mtime=st.st_mtime, library_origin="downloads")
         return found.name
+
+    def library_from_downloads(self) -> dict:
+        """Step 2 → 3: read the Rekordbox export the user just put in Downloads.
+
+        An export already loaded (or older than the current library) is not
+        reloaded; with no library at all and nothing found, it is an error.
+        """
+        loaded = self.check_downloads_for_library()
+        if not self.collection:
+            folder = self.import_settings()["downloads_dir"]
+            raise ApiError(f"Aucun export Rekordbox trouvé dans {folder}. Exporte ta collection "
+                           "(Fichier → Exporter la collection au format xml) ou dépose le fichier.",
+                           404, "no_export")
+        return dict(self.library_status(), just_loaded=loaded)
+
+    def _key_root(self) -> str | None:
+        """The USB key: volume of the music folder, else where most of the collection is."""
+        root = importer.volume_root(self.import_settings()["music_dir"])
+        if root:
+            return root
+        roots = Counter(importer.volume_root(t.location) for t in self.collection if t.location)
+        roots.pop(None, None)
+        return roots.most_common(1)[0][0] if roots else None
+
+    def key_stats(self) -> dict | None:
+        """Tracks of the Rekordbox collection that are not on the USB key: files
+        elsewhere (Mac, Apple Music links…) and, when the key is plugged in,
+        files that should be on it but are not."""
+        root = self._key_root()
+        if not root:
+            return None
+        mounted = importer.is_available(root)
+        absent = 0
+        for t in self.collection:
+            loc = t.location
+            if not loc or importer.volume_root(loc) != root:
+                absent += 1
+            elif mounted and not os.path.exists(loc):
+                absent += 1
+        return {"name": os.path.basename(root), "path": root, "mounted": mounted,
+                "absent": absent, "on_key": len(self.collection) - absent}
 
     def _collection_locations(self) -> set[str]:
         return {t.location for t in self.collection if t.location}
@@ -213,6 +256,9 @@ class App:
             "available": bool(path) and importer.is_available(path),
             "count": len(self.collection),
             "pending_import": len(self._pending_imports()),
+            "origin": self.settings.get("library_origin"),
+            "exported_at": self.settings.get("library_source_mtime"),
+            "key": self.key_stats() if self.collection else None,
             "isrc": self.isrc_count,
             "read_tags": self.read_tags,
             "loaded_at": self.loaded_at,
@@ -222,7 +268,7 @@ class App:
         """Reload the last library (or data/rekordbox.xml) at startup.
 
         When the last library lives on a USB key that is not plugged in, wait
-        for the key (see _retry_library) instead of falling back to another
+        for the key instead of falling back to another
         file, which would also replace the remembered path.
         """
         s = self.settings
@@ -318,6 +364,7 @@ class App:
             raise ApiError("Charge d'abord ta bibliothèque Rekordbox.", 400, "no_library")
         pid = spotify.parse_playlist_id(playlist_id)
         entry = self._playlist(pid, refresh)
+        self._last_playlist_name = entry["name"]
         results = [self._resolve(t) for t in entry["tracks"]]
         counts = {s.name.lower(): 0 for s in Status}
         for r in results:
@@ -369,7 +416,8 @@ class App:
             "music_dir_available": importer.is_available(music_dir),
             "music_volume": importer.volume_root(music_dir),
             "keep_original": bool(s.get("keep_original", False)),
-            "import_playlist": s.get("import_playlist") or "compare2mix",
+            # Empty = same name as the Spotify playlist being compared.
+            "import_playlist": s.get("import_playlist") or "",
             "auto_import": s.get("auto_import", True),
             "import_xml": import_xml,
             "rekordbox_playlists": sorted(self.rb_playlists, key=str.lower),
@@ -392,7 +440,7 @@ class App:
         for key in ("downloads_dir", "music_dir", "import_playlist", "import_xml"):
             if body.get(key) is not None:
                 v = str(body[key]).strip()
-                if not v:
+                if not v and key != "import_playlist":
                     raise ApiError("Valeur vide.")
                 values[key] = os.path.expanduser(v) if key != "import_playlist" else v
         for key in ("auto_import", "keep_original"):
@@ -401,6 +449,10 @@ class App:
         config.update(self.config_path, **values)
         self.write_import_xml()
         return self.import_settings()
+
+    def _import_playlist_name(self) -> str:
+        return (self.import_settings()["import_playlist"] or self._last_playlist_name
+                or "compare2mix")
 
     def write_import_xml(self) -> str | None:
         """(Re)write the XML Rekordbox imports: designated playlist = its current
@@ -411,7 +463,7 @@ class App:
             return None  # XML kept on an unplugged key: rewritten when it comes back
         if not pending and not Path(settings["import_xml"]).exists():
             return None
-        name = settings["import_playlist"]
+        name = self._import_playlist_name()
         tracks: list[Track] = []
         seen: set[str] = set()
         for t in self.rb_playlists.get(name, []) + [i.to_track() for i in pending]:
@@ -456,60 +508,67 @@ class App:
         self._rebuild_library()
         return entry
 
-    def _retry_library(self) -> None:
-        """The library XML may live on the USB key: load it once the key is back."""
-        path = self.settings.get("library_path")
-        if not self.collection and path and os.path.isfile(path):
-            try:
-                self.load_library(path, bool(self.settings.get("read_tags")))
-            except Exception:  # pragma: no cover - shown as "not loaded" in the UI
-                pass
+    def recap(self, playlist_id: str) -> dict:
+        """Step 4: audio files in Downloads vs. the playlist's missing tracks.
 
-    def scan_downloads(self) -> dict:
-        self._retry_library()
-        library_loaded = self.check_downloads_for_library()
+        Nothing is moved here: the user picks the files, then step 5 transfers
+        them one by one (import_download) and builds the XML (build_import_xml).
+        """
+        if not self.collection:
+            raise ApiError("Charge d'abord ta bibliothèque Rekordbox.", 400, "no_library")
+        pid = spotify.parse_playlist_id(playlist_id)
+        entry = self._playlist(pid)
+        self._last_playlist_name = entry["name"]
+        missing = [t for t in entry["tracks"] if self._resolve(t).status == Status.MISSING]
         settings = self.import_settings()
-        can_import = settings["music_dir_available"]
-        imported_now, to_confirm, unmatched = [], [], []
         with self.scan_lock:
             paths = [p for p in importer.scan_folder(settings["downloads_dir"])
                      if not self.imports.is_known(str(p))]
             files = [self._read_file(p) for p in paths]
-            missing = self.missing_tracks() if self.library else []
-            proposals = importer.propose(files, missing)
-            matched = set()
-            for prop in proposals:
-                matched.add(prop.file.location)
-                if prop.status == Status.FOUND and settings["auto_import"] and can_import:
-                    entry = self._import(prop.file, prop.spotify)
-                    imported_now.append(entry.spotify_display)
-                else:
-                    to_confirm.append({
-                        "source": prop.file.location,
-                        "name": Path(prop.file.location).name,
-                        "file": track_json(prop.file),
-                        "spotify": track_json(prop.spotify),
-                        "spotify_key": prop.spotify.key,
-                        "score": prop.result.score,
-                        "notes": prop.result.notes,
-                    })
-            week_ago = time.time() - 7 * 86400
-            for p in paths:
-                if str(p) not in matched and p.exists() and p.stat().st_mtime > week_ago:
-                    unmatched.append({"source": str(p), "name": p.name})
-        unmatched.sort(key=lambda u: u["name"].lower())
+        proposals = importer.propose(files, missing)
+        matched_files = {p.file.location for p in proposals}
+        matched_tracks = {p.spotify.key for p in proposals}
+        week_ago = time.time() - 7 * 86400
+        unmatched = sorted(
+            ({"source": str(p), "name": p.name} for p in paths
+             if str(p) not in matched_files and p.exists() and p.stat().st_mtime > week_ago),
+            key=lambda u: u["name"].lower())
         return {
-            "watching": settings["downloads_dir"],
+            "playlist": entry["name"],
+            "downloads_dir": settings["downloads_dir"],
             "missing": len(missing),
-            "library_auto_loaded": library_loaded,
-            "can_import": can_import,
-            "imported_now": imported_now,
-            "to_confirm": to_confirm,
+            "matches": [{
+                "source": p.file.location,
+                "name": Path(p.file.location).name,
+                "spotify_key": p.spotify.key,
+                "spotify": p.spotify.display,
+                "status": p.status.name.lower(),  # found / probable
+                "score": p.result.score,
+                "notes": p.result.notes,
+            } for p in sorted(proposals, key=lambda p: -p.result.score)],
             "unmatched": unmatched[:30],
-            "pending": [{"file": i.file, "name": Path(i.file).name, "spotify": i.spotify_display}
-                        for i in self._pending_imports()],
-            "settings": settings,
+            "still_missing": [t.display for t in missing if t.key not in matched_tracks],
+            "destination": {
+                "music_dir": settings["music_dir"],
+                "available": settings["music_dir_available"],
+                "volume": settings["music_volume"],
+                "keep_original": settings["keep_original"],
+            },
         }
+
+    def build_import_xml(self) -> dict:
+        """Last step: write the XML with the designated playlist (current tracks
+        + every transferred file not yet in the Rekordbox export)."""
+        pending = self._pending_imports()
+        if not pending:
+            raise ApiError("Aucun morceau à importer pour l'instant.", 404)
+        path = self.write_import_xml()
+        if not path:
+            raise ApiError("Impossible d'écrire le fichier d'import : son dossier est sur une "
+                           "clé qui n'est pas branchée.", 409, "volume")
+        name = self._import_playlist_name()
+        return {"path": path, "playlist": name,
+                "existing": len(self.rb_playlists.get(name, [])), "new": len(pending)}
 
     def import_download(self, source: str, spotify_key: str) -> dict:
         path = Path(source)
@@ -624,7 +683,6 @@ def make_handler(app: App):
                 return self._run(lambda: self._redirect(app.start_login()))
             if path == "/api/status":
                 return self._run(lambda: self._json({
-                    "library_auto_loaded": app.check_downloads_for_library(),
                     "library": app.library_status(),
                     "spotify": app.spotify_status(),
                     "default_library": app.settings.get("library_path") or str(DEFAULT_LIBRARY),
@@ -632,8 +690,8 @@ def make_handler(app: App):
                 }))
             if path == "/api/playlists":
                 return self._run(lambda: self._json(app.list_playlists()))
-            if path == "/api/downloads":
-                return self._run(lambda: self._json(app.scan_downloads()))
+            if path == "/api/recap":
+                return self._run(lambda: self._json(app.recap(q.get("playlist", ""))))
             if path == "/api/import-settings":
                 return self._run(lambda: self._json(app.import_settings()))
             if path == "/api/search":
@@ -672,6 +730,10 @@ def make_handler(app: App):
                 if path == "/api/library":
                     return self._json(app.load_library(body.get("path", ""),
                                                        bool(body.get("read_tags"))))
+                if path == "/api/library/from-downloads":
+                    return self._json(app.library_from_downloads())
+                if path == "/api/import-xml":
+                    return self._json(app.build_import_xml())
                 if path == "/api/import":
                     return self._json(app.import_download(body.get("source", ""),
                                                           body.get("spotify_key", "")))

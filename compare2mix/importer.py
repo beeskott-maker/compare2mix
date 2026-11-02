@@ -370,10 +370,18 @@ class ImportLog:
             shutil.move(str(src), dest)
         else:
             shutil.copy2(src, dest)
+        # A file without usable tags only has its file name: describe it with
+        # the Spotify track it was matched to, so Rekordbox shows a clean title.
+        tagged = bool(file.artists)
         entry = ImportedTrack(
             spotify_key=spotify.key, spotify_display=spotify.display, source=str(src),
-            file=str(dest), title=file.title, artists=list(file.artists),
-            duration_s=file.duration_s, isrc=file.isrc, album=file.album, mix=file.mix,
+            file=str(dest),
+            title=file.title if tagged else spotify.title,
+            artists=list(file.artists if tagged else spotify.artists),
+            duration_s=file.duration_s or spotify.duration_s,
+            isrc=file.isrc or spotify.isrc,
+            album=file.album or (None if tagged else spotify.album),
+            mix=file.mix,
         )
         with self._lock:
             self.imported.append(entry)
