@@ -55,3 +55,15 @@ def test_items_page_2026_and_legacy_shapes():
     tracks = tracks_from_items_page(page)
     assert [t.title for t in tracks] == ["Strobe", "Legacy"]
     assert tracks[0].isrc == "X1" and tracks[0].duration_s == 637
+
+
+def test_client_id_is_remembered(tmp_path, monkeypatch):
+    from compare2mix import cli
+
+    monkeypatch.setattr(cli, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
+    parser = cli.build_parser()
+    first = cli._client(parser.parse_args(["playlists", "--client-id", "abc123"]))
+    assert first.client_id == "abc123"
+    again = cli._client(parser.parse_args(["playlists"]))
+    assert again.client_id == "abc123"

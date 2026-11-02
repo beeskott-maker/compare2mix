@@ -8,8 +8,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+from pathlib import Path
 
 from . import rekordbox, spotify
 from .matcher import Matcher
@@ -19,9 +21,29 @@ from .report import print_report, write_csv
 _STATUS_ARGS = {"found": Status.FOUND, "probable": Status.PROBABLE, "missing": Status.MISSING}
 
 
+CONFIG_FILE = Path.home() / ".compare2mix" / "config.json"
+
+
+def _read_config() -> dict:
+    try:
+        return json.loads(CONFIG_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def _client(args) -> spotify.SpotifyClient:
+    """Client ID priority: --client-id, then SPOTIFY_CLIENT_ID, then the saved one.
+
+    A Client ID given explicitly is saved for next time.
+    """
+    config = _read_config()
+    client_id = args.client_id or os.environ.get("SPOTIFY_CLIENT_ID", "")
+    if client_id and client_id != config.get("client_id"):
+        config["client_id"] = client_id
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_FILE.write_text(json.dumps(config, indent=2))
     return spotify.SpotifyClient(
-        args.client_id or os.environ.get("SPOTIFY_CLIENT_ID", ""),
+        client_id or config.get("client_id", ""),
         redirect_uri=args.redirect_uri,
     )
 

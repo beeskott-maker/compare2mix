@@ -44,8 +44,9 @@ export SPOTIFY_CLIENT_ID=xxxxxxxx
 compare2mix compare --xml data/rekordbox.xml --playlist "https://open.spotify.com/playlist/…"
 ```
 
-La première fois, le navigateur s'ouvre pour autoriser l'accès. Le jeton est ensuite gardé dans
-`~/.compare2mix/`. `compare2mix playlists` liste tes playlists.
+La première fois, le navigateur s'ouvre pour autoriser l'accès. Le Client ID et le jeton sont
+ensuite gardés dans `~/.compare2mix/` : plus besoin de les redonner (`compare2mix login --client-id …`
+suffit une fois). `compare2mix playlists` liste tes playlists.
 
 **Limites du mode développement Spotify (depuis février 2026)** : le propriétaire de l'app doit
 avoir **Spotify Premium**, et seules les playlists dont tu es **propriétaire ou collaborateur**
