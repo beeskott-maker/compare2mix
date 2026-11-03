@@ -88,7 +88,9 @@
   /* step 3 */
   .found { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; min-width: 0; }
   .fileicon { width: 46px; height: 56px; border-radius: 6px; background: var(--accent-soft); color: var(--ok); display: grid; place-items: center; font: 700 12px var(--font-mono); }
-  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .facts { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
+  .facts > .fact { flex: 1 1 150px; }
+  .facts-arrow { align-self: center; color: var(--muted); font-size: 20px; }
   .fact { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
   .fact b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
   .fact span { color: var(--muted); font-size: 13px; }
@@ -273,6 +275,7 @@
       </div>
       <div class="facts">
         <div class="fact"><b id="factTracks">–</b><span>tracks dans Rekordbox</span></div>
+        <span class="facts-arrow" aria-hidden="true">→</span>
         <button class="fact pick on" data-view="new" aria-pressed="true"><b id="factMissing">–</b><span>nouveaux titres à télécharger</span></button>
         <button class="fact pick" data-view="absent" aria-pressed="false" id="factKeyBox"><b id="factKey">–</b><span id="factKeyLbl">tracks absents de la clé</span></button>
       </div>
