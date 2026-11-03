@@ -455,3 +455,31 @@ def test_energy_endpoint_and_comment_tag(env):
     res = call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"],
                                "comment": "E7 · sombre"})
     assert WAVE(res["file"]).tags.getall("COMM")[0].text == ["E7 · sombre"]
+
+
+def test_short_file_is_always_to_check():
+    sp = Track("On My Mind", ["Diplo"], duration_s=263, source_id="spotify:track:o")
+    preview = Track("On My Mind", ["Diplo"], duration_s=30, location="/d/p.mp3")
+    p = importer.propose([preview], [sp])[0]
+    assert p.status == Status.PROBABLE and any("moins de 2 minutes" in n for n in p.result.notes)
+    # Short on both sides (a real short track): still to check.
+    sp_short = Track("Intro", ["X"], duration_s=95, source_id="spotify:track:i")
+    p = importer.propose([Track("Intro", ["X"], duration_s=95, location="/d/i.mp3")], [sp_short])[0]
+    assert p.status == Status.PROBABLE
+
+
+def test_audio_endpoint_serves_downloads_only_with_ranges(env):
+    tmp, app, call = env
+    src = make_wav(tmp / "Downloads" / "a.wav", seconds=1)
+    # Base URL of the test server (captured by the fixture's call helper).
+    url = next(c.cell_contents for c in call.__closure__ if isinstance(c.cell_contents, str))
+    q = "/api/audio?source=" + urllib.parse.quote(str(src))
+    with urllib.request.urlopen(url + q) as r:
+        assert r.headers["Content-Type"] == "audio/wav" and r.read() == src.read_bytes()
+    req = urllib.request.Request(url + q, headers={"Range": "bytes=10-19"})
+    with urllib.request.urlopen(req) as r:
+        assert r.status == 206 and r.read() == src.read_bytes()[10:20]
+        assert r.headers["Content-Range"] == f"bytes 10-19/{src.stat().st_size}"
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(url + "/api/audio?source=" + urllib.parse.quote(str(FIX / "rekordbox_sample.xml")))
+    assert e.value.code == 404

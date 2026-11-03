@@ -133,7 +133,10 @@
   td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .note.alert { color: var(--ko); font-weight: 600; margin-top: 4px; font-family: var(--font-ui); }
   .sp-title { font-weight: 600; }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .fname { display: flex; gap: 8px; align-items: flex-start; }
+  button.play { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); font-size: 10px; line-height: 24px; text-align: center; padding: 0; cursor: pointer; margin-top: -1px; }
+  button.play.on { background: var(--fg); color: var(--panel); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; margin-left: 32px; }
   .chip { font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 6px; border-radius: 5px; background: var(--chip); color: var(--muted); white-space: nowrap; }
   .chip.fmt { background: var(--fg); color: var(--panel); }
   tr.has-sub td { border-bottom: none; padding-bottom: 2px; }
@@ -718,6 +721,7 @@ $("next3").addEventListener("click", () => go(4));
 
 // ---------- step 4: recap -------------------------------------------------------
 async function loadRecap() {
+  stopPlayer();
   const body = $("recapBody");
   body.replaceChildren(el("div", { class: "empty" }, el("span", { class: "spinner" }), " Vérification…"));
   $("startCopy").disabled = true;
@@ -798,6 +802,43 @@ async function fetchGenres(recap) {
 }
 $("recheck").addEventListener("click", (e) => busy(e.currentTarget, loadRecap));
 
+// ▶ / ⏸ next to the file name: listen to the file before filing it.
+// One player for the whole page; starting a file stops the previous one.
+const player = new Audio();
+let playing = null; // { source, btn }
+function setPlayIcon(btn, on) {
+  btn.textContent = on ? "⏸" : "▶";
+  btn.setAttribute("aria-label", on ? "Pause" : "Écouter");
+  btn.classList.toggle("on", on);
+}
+player.addEventListener("ended", () => { if (playing) setPlayIcon(playing.btn, false); });
+player.addEventListener("pause", () => { if (playing) setPlayIcon(playing.btn, false); });
+player.addEventListener("play", () => { if (playing) setPlayIcon(playing.btn, true); });
+player.addEventListener("error", () => {
+  if (playing) { setPlayIcon(playing.btn, false); toast("Lecture impossible de ce format dans le navigateur.", true); }
+});
+function stopPlayer() {
+  player.pause();
+  player.removeAttribute("src");
+  player.load();
+  playing = null;
+}
+function playButton(m) {
+  const btn = el("button", { class: "play", type: "button", title: "Écouter le fichier" });
+  setPlayIcon(btn, false);
+  btn.addEventListener("click", () => {
+    if (playing && playing.source === m.source) {
+      if (player.paused) player.play().catch(() => {}); else player.pause();
+      return;
+    }
+    if (playing) { player.pause(); setPlayIcon(playing.btn, false); }
+    playing = { source: m.source, btn };
+    player.src = "/api/audio?source=" + encodeURIComponent(m.source);
+    player.play().catch(() => {});
+  });
+  return btn;
+}
+
 // Technical tags under the file name: format, bitrate, sample rate, bit depth.
 function audioChips(a) {
   if (!a) return null;
@@ -850,7 +891,8 @@ function renderRecap() {
         el("td", {}, el("div", { class: "sp-title" }, m.spotify_title),
           el("div", { class: "sp-artist" }, m.spotify_artists)),
         el("td", { class: "eq", "aria-hidden": "true" }, "="),
-        el("td", { class: "file" }, m.new_name || m.name, audioChips(m.audio)),
+        el("td", { class: "file" }, el("div", { class: "fname" }, playButton(m), el("span", {}, m.new_name || m.name)),
+          audioChips(m.audio)),
         el("td", {}, genreInput(m)),
         el("td", {}, energyCell(m)),
         el("td", {}, el("span", { class: m.status === "found" ? "status found" : "status check" },
@@ -899,6 +941,7 @@ $("startCopy").addEventListener("click", runTransfer);
 async function runTransfer() {
   if (!state.recap || !state.recap.matches) return;
   const sel = state.recap.matches.filter((m) => m.on);
+  stopPlayer(); // the files are about to move
   state.transfer = { done: false };
   go(5);
   $("back5").disabled = true;

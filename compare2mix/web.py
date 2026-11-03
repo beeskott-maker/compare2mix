@@ -15,6 +15,7 @@ import io
 import json
 from collections import Counter
 import os
+import re
 import threading
 import time
 import traceback
@@ -567,12 +568,17 @@ class App:
         except discogs.DiscogsError as e:
             raise ApiError(str(e), 502, "discogs") from e
 
-    def energy(self, source: str) -> dict:
-        """Step 4: energy (1-10) and mood of a file in Downloads (local analysis)."""
+    def downloads_file(self, source: str) -> Path:
+        """A file of the Downloads folder (and nowhere else)."""
         path = Path(source)
         downloads = Path(self.import_settings()["downloads_dir"]).expanduser().resolve()
         if not path.is_file() or downloads not in path.resolve().parents:
             raise ApiError("Fichier introuvable dans Téléchargements.", 404)
+        return path
+
+    def energy(self, source: str) -> dict:
+        """Step 4: energy (1-10) and mood of a file in Downloads (local analysis)."""
+        path = self.downloads_file(source)
         if not energy.available():
             raise ApiError("Analyse d'énergie indisponible : installe Essentia "
                            "(pip install essentia-tensorflow).", 501, "no_essentia")
@@ -641,6 +647,10 @@ def _durations_if_different(file_s: float | None, spotify_s: float | None) -> di
 # HTTP layer
 # --------------------------------------------------------------------------
 
+_AUDIO_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".aif": "audio/aiff",
+                ".aiff": "audio/aiff", ".flac": "audio/flac", ".m4a": "audio/mp4",
+                ".mp4": "audio/mp4", ".aac": "audio/aac"}
+
 _ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
 
 
@@ -666,6 +676,45 @@ def make_handler(app: App):
                 self.send_header(k, v)
             self.end_headers()
             self.wfile.write(body)
+
+        def _send_audio(self, path: Path):
+            """Stream an audio file, with Range support (seeking in the player)."""
+            size = path.stat().st_size
+            ctype = _AUDIO_TYPES.get(path.suffix.lower(), "application/octet-stream")
+            start, end = 0, size - 1
+            m = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range") or "")
+            if m and (m.group(1) or m.group(2)):
+                if m.group(1):
+                    start = int(m.group(1))
+                    end = min(int(m.group(2)), size - 1) if m.group(2) else size - 1
+                else:  # last N bytes
+                    start = max(0, size - int(m.group(2)))
+                if start > end or start >= size:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{size}")
+                    self.end_headers()
+                    return
+                self.send_response(206)
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            else:
+                self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(end - start + 1))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            with open(path, "rb") as f:
+                f.seek(start)
+                left = end - start + 1
+                while left > 0:
+                    chunk = f.read(min(65536, left))
+                    if not chunk:
+                        break
+                    try:
+                        self.wfile.write(chunk)
+                    except (BrokenPipeError, ConnectionResetError):
+                        return  # the player stopped or jumped elsewhere
+                    left -= len(chunk)
 
         def _json(self, data, status: int = 200):
             self._send(status, json.dumps(data, ensure_ascii=False).encode(),
@@ -735,6 +784,8 @@ def make_handler(app: App):
                 return self._run(lambda: self._json(app.recap(q.get("playlist", ""))))
             if path == "/api/import-settings":
                 return self._run(lambda: self._json(app.import_settings()))
+            if path == "/api/audio":
+                return self._run(lambda: self._send_audio(app.downloads_file(q.get("source", ""))))
             if path == "/api/energy":
                 return self._run(lambda: self._json(app.energy(q.get("source", ""))))
             if path == "/api/genre":

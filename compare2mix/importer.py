@@ -349,10 +349,17 @@ def durations_differ(a: float | None, b: float | None) -> bool:
     return bool(a and b and abs(a - b) > DURATION_TOLERANCE_S)
 
 
+MIN_FULL_TRACK_S = 120
+
+
 def _downgrade_if_duration_differs(r) -> None:
-    """A downloaded file whose length differs from Spotify's is never "sure":
-    it may be another version (extended, radio edit…) or another track."""
-    if durations_differ(r.match.duration_s, r.spotify.duration_s):
+    """A downloaded file is never "sure" when its length differs from Spotify's
+    (another version: extended, radio edit… or another track), nor when it
+    lasts under 2 minutes (often a preview, not the full track)."""
+    short = bool(r.match.duration_s) and r.match.duration_s < MIN_FULL_TRACK_S
+    if short:
+        r.notes.append("fichier de moins de 2 minutes : extrait ?")
+    if short or durations_differ(r.match.duration_s, r.spotify.duration_s):
         r.score = min(r.score, FOUND_THRESHOLD - 10)
         if r.status == Status.FOUND:
             r.status = Status.PROBABLE
