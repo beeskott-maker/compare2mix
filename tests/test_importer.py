@@ -4,6 +4,7 @@ import json
 import os
 import threading
 import time
+import urllib.parse
 import urllib.request
 import wave
 from http.server import ThreadingHTTPServer
@@ -181,7 +182,8 @@ def test_recap_then_transfer(env):
     assert m["new_name"] == moved.name
     assert "durations" in m and not any(n.startswith("durée") for n in m["notes"])
     assert res == {"imported": "Nobody – Some Unknown Track", "file": str(moved),
-                   "renamed": False, "genre": "Acid House / Techno", "tags_error": None}
+                   "renamed": False, "genre": "Acid House / Techno", "comment": None,
+                   "tags_error": None}
     assert WAVE(moved).tags["TCON"].text == ["Acid House / Techno"]
     assert moved.exists() and not (tmp / "Downloads" / "whatever.wav").exists()
     assert call("/api/transfer-done", {}) == {"export_archived": None}  # XML given by hand
@@ -413,3 +415,41 @@ def test_genre_endpoint(env):
     app._discogs_factory = lambda token: type("D", (), {
         "genre_for": staticmethod(lambda t: {"genre": "House", "styles": ["House"], "releases": 3})})()
     assert call("/api/genre?spotify_key=spotify:track:9")["genre"] == "House"
+
+
+# ---- energy (local analysis) --------------------------------------------------
+
+def test_energy_score_and_mood():
+    from compare2mix import energy
+    # Values measured on real tracks: piano solo, deep house, peak-time techno.
+    assert energy.energy_score(3.38, 0.06, -17.8) == 2
+    assert energy.energy_score(5.70, 0.86, -14.0) == 7
+    assert energy.energy_score(6.47, 0.73, -11.4) == 8
+    assert energy.energy_score(9.0, 1.0, 0.0) == 10 and energy.energy_score(1.0, 0.0, -60) == 1
+    assert energy.mood_word({"aggressive": 0.1, "happy": 0.2, "relaxed": 0.9, "sad": 0.3}) == "planant"
+    assert energy.mood_word({"aggressive": 0.4, "happy": 0.3, "relaxed": 0.2, "sad": 0.1}) is None
+    assert energy.comment_text(7, "sombre") == "E7 · sombre"
+    assert energy.comment_text(7, None) == "E7" and energy.comment_text(None, None) is None
+
+
+def test_energy_endpoint_and_comment_tag(env):
+    tmp, app, call = env
+
+    class FakeAnalyzer:
+        def analyze(self, path):
+            return {"energy": 7, "mood": "sombre"}
+
+    app.analyzer = FakeAnalyzer()
+    src = make_wav(tmp / "Downloads" / "whatever.wav", title="Some Unknown Track",
+                   artist="Nobody", seconds=300)
+    from compare2mix import energy
+    if energy.available():
+        assert call("/api/energy?source=" + urllib.parse.quote(str(src)))["energy"] == 7
+    # Only files in Downloads can be analysed.
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call("/api/energy?source=" + urllib.parse.quote(str(FIX / "rekordbox_sample.xml")))
+    assert e.value.code == 404
+    m = call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")["matches"][0]
+    res = call("/api/import", {"source": m["source"], "spotify_key": m["spotify_key"],
+                               "comment": "E7 · sombre"})
+    assert WAVE(res["file"]).tags.getall("COMM")[0].text == ["E7 · sombre"]

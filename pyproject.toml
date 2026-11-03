@@ -13,6 +13,8 @@ dependencies = ["rapidfuzz>=3.0", "certifi"]
 [project.optional-dependencies]
 tags = ["mutagen>=1.47"]
 db = ["pyrekordbox>=0.3"]
+# Energy and mood analysis (Python 3.14 at most, macOS 15+)
+energie = ["essentia-tensorflow"]
 dev = ["pytest>=8"]
 
 [project.scripts]

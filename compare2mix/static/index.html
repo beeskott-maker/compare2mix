@@ -130,6 +130,7 @@
   th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .note.alert { color: var(--ko); font-weight: 600; margin-top: 4px; font-family: var(--font-ui); }
+  input.energy { width: 56px; font-size: 13px; padding: 4px 6px; }
   input.genre { width: 100%; min-width: 130px; font-size: 13px; padding: 4px 8px; }
   td.eq { color: var(--muted); font-weight: 700; font-size: 18px; text-align: center; padding-left: 0; padding-right: 0; width: 1.5em; }
   td.file { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; min-width: 180px; }
@@ -700,6 +701,45 @@ async function loadRecap() {
   state.recap.matches.forEach((m) => (m.on = true));
   renderRecap();
   fetchGenres(state.recap);
+  fetchEnergies(state.recap);
+}
+
+// Energy (1-10) and mood, analysed on this computer, one file at a time.
+async function fetchEnergies(recap) {
+  for (const m of recap.matches) {
+    if (state.recap !== recap) return;
+    if (m.energyLoaded) continue;
+    let info = null, err = null;
+    try { info = await api("/api/energy?source=" + encodeURIComponent(m.source)); }
+    catch (e) { err = e.message; }
+    m.energyLoaded = true;
+    if (!m.energyEdited && info) m.energy = info.energy;
+    m.mood = info ? info.mood : null;
+    renderEnergy(m, err);
+    if (err && /Essentia/.test(err)) { // not installed: no use trying the others
+      for (const o of recap.matches) if (!o.energyLoaded) { o.energyLoaded = true; renderEnergy(o, err); }
+      return;
+    }
+  }
+}
+
+function energyCell(m) {
+  const input = el("input", { type: "number", min: "1", max: "10", step: "1", class: "energy",
+    "aria-label": "Énergie de " + m.spotify, placeholder: m.energyLoaded ? "–" : "…" });
+  if (m.energy) input.value = m.energy;
+  input.addEventListener("input", () => { m.energy = parseInt(input.value, 10) || null; m.energyEdited = true; });
+  const mood = el("div", { class: "note" }, m.mood || "");
+  m.energyInput = input; m.moodEl = mood;
+  return el("div", {}, input, mood);
+}
+
+function renderEnergy(m, err) {
+  if (!m.energyInput) return;
+  if (!m.energyEdited) m.energyInput.value = m.energy || "";
+  m.energyInput.placeholder = "–";
+  if (err) m.energyInput.title = err;
+  m.moodEl.textContent = m.mood || (err ? "non analysé" : "");
+  if (err) m.moodEl.title = err;
 }
 
 // Genre of each matched track, from Discogs, one after the other (rate limit).
@@ -758,12 +798,13 @@ function renderRecap() {
         el("td", { class: "eq", "aria-hidden": "true" }, "="),
         el("td", { class: "file" }, m.new_name || m.name, dur(m.durations && m.durations.file)),
         el("td", {}, genreInput(m)),
+        el("td", {}, energyCell(m)),
         el("td", {}, el("span", { class: m.status === "found" ? "status found" : "status check" },
           m.status === "found" ? "✅ sûr" : "à vérifier"),
           m.notes.length ? el("div", { class: "note" }, m.notes.join(" · ")) : null));
     });
     parts.push(el("div", { class: "tablewrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Morceau manquant"), el("th", {}), el("th", {}, "Fichier"), el("th", {}, "Genre"), el("th", {}, "Correspondance"))),
+      el("thead", {}, el("tr", {}, el("th", {}), el("th", {}, "Morceau manquant"), el("th", {}), el("th", {}, "Fichier"), el("th", {}, "Genre"), el("th", {}, "Énergie"), el("th", {}, "Correspondance"))),
       el("tbody", {}, rows))));
   } else {
     parts.push(el("p", { class: "lead" }, "Aucun fichier de Téléchargements ne correspond aux morceaux manquants pour l'instant. Télécharge-les, puis clique sur Revérifier."));
@@ -817,9 +858,12 @@ async function runTransfer() {
   for (let i = 0; i < sel.length; i++) {
     mark(lis[i], "run", "◐");
     try {
-      const r = await api("/api/import", { source: sel[i].source, spotify_key: sel[i].spotify_key, genre: sel[i].genre || "" });
+      const comment = [sel[i].energy ? "E" + sel[i].energy : "", sel[i].mood || ""].filter(Boolean).join(" · ");
+      const r = await api("/api/import", { source: sel[i].source, spotify_key: sel[i].spotify_key,
+        genre: sel[i].genre || "", comment });
       mark(lis[i], "ok", "✓", "→ " + r.file + (r.renamed ? " (un fichier de ce nom existait déjà)" : "")
-        + (r.genre ? " · " + r.genre : "") + (r.tags_error ? " · " + r.tags_error : ""));
+        + (r.genre ? " · " + r.genre : "") + (r.comment ? " · " + r.comment : "")
+        + (r.tags_error ? " · " + r.tags_error : ""));
       ok++;
     } catch (e) {
       mark(lis[i], "err", "✗", e.message);

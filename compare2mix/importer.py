@@ -232,11 +232,12 @@ def _tag_value(tags, field_name: str) -> str | None:
 
 
 def write_tags(path: str | os.PathLike, genre: str | None = None,
-               title: str | None = None, artists: list[str] | None = None) -> None:
-    """Write the genre (replacing any existing one) and, when given, the title
-    and artists into the file's tags, so Rekordbox shows them. Needs mutagen."""
+               title: str | None = None, artists: list[str] | None = None,
+               comment: str | None = None) -> None:
+    """Write the genre and comment (replacing existing ones) and, when given,
+    the title and artists into the file's tags, so Rekordbox shows them."""
     import mutagen  # type: ignore
-    from mutagen.id3 import ID3, TCON, TIT2, TPE1  # type: ignore
+    from mutagen.id3 import COMM, ID3, TCON, TIT2, TPE1  # type: ignore
     from mutagen.mp4 import MP4Tags  # type: ignore
 
     audio = mutagen.File(path)
@@ -250,12 +251,16 @@ def write_tags(path: str | os.PathLike, genre: str | None = None,
         for frame, value in ((TCON, genre), (TIT2, title), (TPE1, artist)):
             if value:
                 tags.setall(frame.__name__, [frame(encoding=3, text=[value])])
+        if comment:  # the comment Rekordbox shows: no description
+            tags.setall("COMM", [COMM(encoding=3, lang="eng", desc="", text=[comment])])
     elif isinstance(tags, MP4Tags):  # M4A / AAC
-        for k, value in (("\xa9gen", genre), ("\xa9nam", title), ("\xa9ART", artist)):
+        for k, value in (("\xa9gen", genre), ("\xa9nam", title), ("\xa9ART", artist),
+                         ("\xa9cmt", comment)):
             if value:
                 tags[k] = [value]
     else:  # FLAC / Ogg (Vorbis comments)
-        for k, value in (("genre", genre), ("title", title), ("artist", artist)):
+        for k, value in (("genre", genre), ("title", title), ("artist", artist),
+                         ("comment", comment)):
             if value:
                 tags[k] = [value]
     audio.save()

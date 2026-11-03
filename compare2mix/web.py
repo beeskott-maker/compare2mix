@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
-from . import config, discogs, importer, rekordbox, spotify
+from . import config, discogs, energy, importer, rekordbox, spotify
 from .decisions import DecisionStore
 from .matcher import Matcher
 from .models import MatchResult, Status, Track
@@ -91,7 +91,8 @@ class App:
                  decisions: DecisionStore | None = None,
                  spotify_factory: Callable[[str, str], spotify.SpotifyClient] | None = None,
                  imports: importer.ImportLog | None = None,
-                 discogs_factory: Callable[[str | None], discogs.Discogs] | None = None):
+                 discogs_factory: Callable[[str | None], discogs.Discogs] | None = None,
+                 analyzer: energy.Analyzer | None = None):
         self.port = port
         self.config_path = config_path or config.CONFIG_FILE
         self.decisions = decisions or DecisionStore()
@@ -102,6 +103,7 @@ class App:
         self._discogs_factory = discogs_factory or (lambda token: discogs.Discogs(token))
         self._discogs: discogs.Discogs | None = None
         self._discogs_token: str | None = None
+        self.analyzer = analyzer or energy.Analyzer()
         self.lock = threading.RLock()
         self.scan_lock = threading.Lock()
         self.library_lock = threading.Lock()
@@ -561,7 +563,24 @@ class App:
         except discogs.DiscogsError as e:
             raise ApiError(str(e), 502, "discogs") from e
 
-    def import_download(self, source: str, spotify_key: str, genre: str | None = None) -> dict:
+    def energy(self, source: str) -> dict:
+        """Step 4: energy (1-10) and mood of a file in Downloads (local analysis)."""
+        path = Path(source)
+        downloads = Path(self.import_settings()["downloads_dir"]).expanduser().resolve()
+        if not path.is_file() or downloads not in path.resolve().parents:
+            raise ApiError("Fichier introuvable dans Téléchargements.", 404)
+        if not energy.available():
+            raise ApiError("Analyse d'énergie indisponible : installe Essentia "
+                           "(pip install essentia-tensorflow).", 501, "no_essentia")
+        try:
+            return self.analyzer.analyze(path)
+        except energy.EnergyUnavailable as e:
+            raise ApiError(str(e), 502, "energy") from e
+        except Exception as e:  # unreadable file, model error…
+            raise ApiError(f"Analyse impossible : {e}", 500, "energy") from e
+
+    def import_download(self, source: str, spotify_key: str, genre: str | None = None,
+                        comment: str | None = None) -> dict:
         path = Path(source)
         if not path.is_file():
             raise ApiError(f"Fichier introuvable : {source}", 404)
@@ -574,11 +593,12 @@ class App:
         # Genre chosen in step 4 (replaces the file's own); a file without tags
         # also gets the Spotify title and artists, so Rekordbox shows them.
         genre = (genre or "").strip() or None
+        comment = (comment or "").strip() or None
         untagged = not file.artists
         tags_error = None
-        if genre or untagged:
+        if genre or comment or untagged:
             try:
-                importer.write_tags(entry.file, genre=genre,
+                importer.write_tags(entry.file, genre=genre, comment=comment,
                                     title=entry.title if untagged else None,
                                     artists=entry.artists if untagged else None)
             except Exception as e:  # the file is filed anyway
@@ -586,7 +606,7 @@ class App:
         # "renamed": a file with the same name was already there, so "(2)" was added.
         return {"imported": entry.spotify_display, "file": entry.file,
                 "renamed": Path(entry.file).name != wanted, "genre": genre,
-                "tags_error": tags_error}
+                "comment": comment, "tags_error": tags_error}
 
     def search(self, query: str) -> list[dict]:
         return [track_json(t) for t in self.matcher.search(query, limit=12)]
@@ -711,6 +731,8 @@ def make_handler(app: App):
                 return self._run(lambda: self._json(app.recap(q.get("playlist", ""))))
             if path == "/api/import-settings":
                 return self._run(lambda: self._json(app.import_settings()))
+            if path == "/api/energy":
+                return self._run(lambda: self._json(app.energy(q.get("source", ""))))
             if path == "/api/genre":
                 return self._run(lambda: self._json(app.genre(q.get("spotify_key", ""))))
             if path == "/api/search":
@@ -750,7 +772,8 @@ def make_handler(app: App):
                 if path == "/api/import":
                     return self._json(app.import_download(body.get("source", ""),
                                                           body.get("spotify_key", ""),
-                                                          body.get("genre")))
+                                                          body.get("genre"),
+                                                          body.get("comment")))
                 if path == "/api/import-settings":
                     return self._json(app.set_import_settings(body))
                 if path == "/api/default-playlist":

@@ -76,7 +76,9 @@ en 5 étapes :
    « ARTISTE - TITRE.ext » d'après ses tags (ou d'après Spotify s'il n'en a pas), sauf s'il porte
    déjà ce nom ; le nouveau nom est affiché ici. La colonne **Genre** est remplie depuis
    [Discogs](https://www.discogs.com) (les deux styles les plus fréquents parmi les disques qui
-   contiennent le morceau, ex. « Techno / Acid ») et reste modifiable. **Rien n'est déplacé ici.**
+   contiennent le morceau, ex. « Techno / Acid ») et reste modifiable. La colonne **Énergie**
+   (1 à 10, avec l'humeur : sombre, joyeux, planant, agressif) est calculée sur ton Mac par
+   analyse audio (voir plus bas). **Rien n'est déplacé ici.**
 5. **Copie** : « Lancer la copie » déplace les fichiers cochés vers la clé avec une barre de
    progression. Il reste à les glisser depuis le Finder sur ta playlist dans Rekordbox. L'export
    Rekordbox lu dans Téléchargements est alors renommé « … (traité).xml » : il ne sera plus relu
@@ -91,13 +93,27 @@ rangement sur la clé (avec suggestion), copier au lieu de déplacer, et un jeto
 (facultatif : discogs.com → Paramètres → Développeurs → « Generate new token » ; il fait passer la
 limite de 25 à 60 recherches par minute).
 
-À la copie, le genre est écrit dans le tag Genre du fichier (il remplace celui qui s'y trouvait),
+À la copie, le genre est écrit dans le tag Genre du fichier et l'énergie dans le tag Commentaire
+(« E7 · sombre ») ; ils remplacent ce qui s'y trouvait,
 et un fichier sans tags reçoit le titre et les artistes Spotify : Rekordbox les lit quand tu
 ajoutes le morceau.
 
 compare2mix n'écrit jamais dans Rekordbox : il range les fichiers, tu les ajoutes toi-même. Si la
 clé n'est pas branchée, rien n'est écrit (pas de faux dossier sur le disque du Mac) : branche-la
 puis « Revérifier ».
+
+## Analyse d'énergie (facultative)
+
+```bash
+pip install essentia-tensorflow   # ou : pip install -e ".[energie]"
+```
+
+[Essentia](https://essentia.upf.edu) n'existe que jusqu'à **Python 3.14** (macOS 15 ou plus) : avec
+un Python plus récent, crée l'environnement avec `python3.14 -m venv .venv`. Au premier usage, les
+modèles d'analyse (~24 Mo, licence CC BY-NC-SA, usage personnel) sont téléchargés dans
+`~/.compare2mix/models`. L'analyse se fait sur les deux minutes centrales du morceau (quelques
+secondes) et rien ne quitte ton Mac. La note combine l'excitation perçue (*arousal*), le caractère
+« festif » et le niveau sonore : environ 4-5 pour un warm-up, 7-8 pour du peak time.
 
 ## Options utiles
 
@@ -137,7 +153,7 @@ Structure : `compare2mix/rekordbox.py` (lecture XML / master.db), `spotify.py` (
 - [x] Mémorisation des correspondances validées à la main
 - [x] Récupération des fichiers téléchargés, renommés et rangés sur la clé
 - [x] Genre détaillé depuis Discogs, écrit dans les tags
-- [ ] Niveau d'énergie (analyse audio locale)
+- [x] Niveau d'énergie et humeur (analyse audio locale avec Essentia)
 - [ ] Comparer toutes les playlists d'un coup (liste d'achats unique)
 - [ ] Playlist Spotify « À acheter »
 - [ ] Comparaison avec une playlist Rekordbox précise plutôt que toute la collection
