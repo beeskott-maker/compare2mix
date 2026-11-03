@@ -90,7 +90,8 @@ en 5 étapes :
    télécharger, tracks absents de la clé USB) ; puis les morceaux manquants. Clic sur un titre =
    copie du lien Spotify ; copie de la liste, export CSV, corrections d'un clic.
 4. **Récapitulatif** : fichiers audio trouvés dans Téléchargements comparés aux manquants
-   (« 2 / 37 manquants retrouvés »), avec une case par fichier (✅ sûr, 🟡 à vérifier), les fichiers
+   (« 2 / 37 manquants retrouvés »), avec une case par fichier (✅ sûr, cochée ; à vérifier,
+   décochée), le format, le bitrate, la fréquence et la profondeur de chaque fichier, les fichiers
    non reconnus, les morceaux toujours manquants et la destination. Chaque fichier est renommé
    « ARTISTE - TITRE.ext » d'après ses tags (ou d'après Spotify s'il n'en a pas), sauf s'il porte
    déjà ce nom ; le nouveau nom est affiché ici. La colonne **Genre** est remplie depuis

@@ -509,6 +509,7 @@ class App:
             "matches": [{
                 "source": p.file.location,
                 "name": Path(p.file.location).name,
+                "audio": importer.audio_info(p.file.location),
                 "new_name": importer.target_name(p.file, p.spotify,
                                                  Path(p.file.location).suffix.lower()),
                 "spotify_key": p.spotify.key,

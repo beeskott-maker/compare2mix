@@ -180,6 +180,7 @@ def test_recap_then_transfer(env):
                                "genre": "Acid House / Techno"})
     moved = tmp / "Music" / "Nobody - Some Unknown Track.wav"
     assert m["new_name"] == moved.name
+    assert m["audio"] == {"format": "WAV", "kbps": 128, "khz": 8.0, "bits": 16}
     assert "durations" in m and not any(n.startswith("durée") for n in m["notes"])
     assert res == {"imported": "Nobody – Some Unknown Track", "file": str(moved),
                    "renamed": False, "genre": "Acid House / Techno", "comment": None,

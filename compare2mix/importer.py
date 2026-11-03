@@ -231,6 +231,37 @@ def _tag_value(tags, field_name: str) -> str | None:
     return None
 
 
+_FORMAT_NAMES = {".aif": "AIFF", ".aiff": "AIFF", ".m4a": "M4A", ".mp4": "M4A"}
+
+
+def audio_info(path: str | os.PathLike) -> dict:
+    """Technical details shown as tags in step 4:
+    {"format": "WAV", "kbps": 2117, "khz": 44.1, "bits": 24} (missing ones are None).
+    The bit depth only exists for uncompressed / lossless files (not MP3)."""
+    path = Path(path)
+    info = {"format": _FORMAT_NAMES.get(path.suffix.lower(), path.suffix.lstrip(".").upper()),
+            "kbps": None, "khz": None, "bits": None}
+    try:
+        import mutagen  # type: ignore
+
+        audio = mutagen.File(path)
+    except Exception:
+        return info
+    i = getattr(audio, "info", None)
+    if i is None:
+        return info
+    bitrate = getattr(i, "bitrate", None)
+    rate = getattr(i, "sample_rate", None)
+    bits = getattr(i, "bits_per_sample", None) or getattr(i, "sample_size", None)
+    if bitrate:
+        info["kbps"] = round(bitrate / 1000)
+    if rate:
+        info["khz"] = round(rate / 1000, 1)
+    if bits and info["format"] not in ("MP3", "M4A", "AAC", "OGG"):
+        info["bits"] = int(bits)
+    return info
+
+
 def write_tags(path: str | os.PathLike, genre: str | None = None,
                title: str | None = None, artists: list[str] | None = None,
                comment: str | None = None) -> None:
