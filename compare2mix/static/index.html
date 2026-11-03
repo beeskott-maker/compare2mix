@@ -813,8 +813,8 @@ function renderRecap() {
       cb.addEventListener("change", () => { m.on = cb.checked; updateStart(); });
       const main = el("tr", { class: m.durations ? "has-sub" : null },
         el("td", {}, cb),
-        el("td", {}, el("div", { class: "sp-artist" }, m.spotify_artists),
-          el("div", { class: "sp-title" }, m.spotify_title)),
+        el("td", {}, el("div", { class: "sp-title" }, m.spotify_title),
+          el("div", { class: "sp-artist" }, m.spotify_artists)),
         el("td", { class: "eq", "aria-hidden": "true" }, "="),
         el("td", { class: "file" }, m.new_name || m.name, audioChips(m.audio)),
         el("td", {}, genreInput(m)),
