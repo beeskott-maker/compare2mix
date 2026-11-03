@@ -130,7 +130,9 @@ dossier (par défaut celui de la clé, sous-dossiers compris) et propose, pour c
 propositions, modifiables ; les fichiers à corriger sont listés au fil de l'analyse. « Appliquer les
 modifications » écrit seulement les tags Genre et Commentaire : **les fichiers ne sont jamais renommés
 ni déplacés**, Rekordbox les retrouve toujours. Pour un morceau déjà importé, recharge ses tags dans
-Rekordbox. Un fichier dont le commentaire contient déjà une énergie (« E7 … ») n'est pas réanalysé.
+Rekordbox. Un fichier dont le commentaire contient déjà une énergie (« E7 … ») n'est pas réanalysé. Par défaut, les genres déjà
+précis sont gardés : Discogs n'est interrogé que pour les genres vides ou vagues (« Electronic »,
+« Dance »…). Avec un jeton Discogs (Réglages), la recherche va deux fois et demie plus vite.
 
 ## Analyse d'énergie (facultative)
 
@@ -141,7 +143,7 @@ pip install essentia-tensorflow   # ou : pip install -e ".[energie]"
 [Essentia](https://essentia.upf.edu) n'existe que jusqu'à **Python 3.14** (macOS 15 ou plus) : avec
 un Python plus récent, crée l'environnement avec `python3.14 -m venv .venv`. Au premier usage, les
 modèles d'analyse (~24 Mo, licence CC BY-NC-SA, usage personnel) sont téléchargés dans
-`~/.compare2mix/models`. L'analyse se fait sur les deux minutes centrales du morceau (quelques
+`~/.compare2mix/models`. L'analyse se fait sur la minute centrale du morceau (quelques
 secondes) et rien ne quitte ton Mac. La note combine l'excitation perçue (*arousal*), le caractère
 « festif » et le niveau sonore : environ 4-5 pour un warm-up, 7-8 pour du peak time.
 

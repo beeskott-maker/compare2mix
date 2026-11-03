@@ -366,6 +366,7 @@
         <button class="btn primary" id="corrScan">Analyser</button>
       </div>
       <label class="check"><input type="checkbox" id="corrSub" checked> inclure les sous-dossiers</label>
+      <label class="check"><input type="checkbox" id="corrKeepGenre" checked> garder les genres déjà précis (plus rapide : Discogs n'est interrogé que pour les genres vides ou vagues)</label>
     </div>
     <div class="panel stack" id="corrReview" hidden>
       <div class="spread">
@@ -1319,9 +1320,18 @@ function corrRefresh() {
 }
 document.querySelectorAll("#corrTabs .tab").forEach((t) => t.addEventListener("click", () => { corr.filter = t.dataset.f; corrRefresh(); }));
 
+// Vague genres worth replacing by a Discogs style.
+const VAGUE_GENRES = new Set(["", "electronic", "electronica", "electro", "dance", "edm", "dance & edm",
+  "electronic music", "other", "unknown", "misc", "genre", "none", "pop", "club", "various"]);
 async function corrGenres(run) {
+  const keep = $("corrKeepGenre").checked;
   for (const f of corr.files) {
     if (run !== corr.run) return;
+    if (keep && !VAGUE_GENRES.has((f.genre || "").trim().toLowerCase())) { // already precise
+      f.genreLoaded = true;
+      if (!f.genreEdited) f.newGenre = f.genre;
+      corrUpdate(f); continue;
+    }
     let g = null;
     try { g = (await api("/api/correction/genre?path=" + encodeURIComponent(f.path))).genre; }
     catch (e) { f.genreError = e.message; }

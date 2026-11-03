@@ -4,7 +4,7 @@ Optional: needs ``pip install essentia-tensorflow`` (Python ≤ 3.14 on macOS 15
 The models (~24 MB, from essentia.upf.edu, CC BY-NC-SA) are downloaded once
 into ~/.compare2mix/models. Nothing leaves the computer.
 
-Features, on the middle two minutes of the track:
+Features, on the middle minute of the track:
   - arousal (calm → excited, 1-9) from the DEAM model on MusiCNN embeddings;
   - "party" and moods (aggressive, happy, relaxed, sad) from Discogs-EffNet;
   - loudness (RMS level).
@@ -41,7 +41,7 @@ MODELS = {
 # the others list "non_…" first).
 _POSITIVE = {"aggressive": 0, "happy": 0, "relaxed": 1, "sad": 1, "party": 1}
 MOOD_WORDS = {"aggressive": "agressif", "happy": "joyeux", "relaxed": "planant", "sad": "sombre"}
-SEGMENT_S = 120
+SEGMENT_S = 60  # the middle minute: twice as fast as two minutes, same scores within 1 point
 SAMPLE_RATE = 16000
 
 
