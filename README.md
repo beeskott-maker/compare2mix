@@ -53,6 +53,25 @@ avoir **Spotify Premium**, et seules les playlists dont tu es **propriétaire ou
 sont lisibles. Pour une playlist éditoriale ou celle de quelqu'un d'autre, utilise l'option A,
 ou duplique-la d'abord dans ta bibliothèque Spotify.
 
+## Lancer sans terminal (macOS)
+
+Une seule fois, dans le dossier du projet :
+
+```bash
+bash macos/creer-app.sh
+```
+
+Cela crée l'application **compare2mix** dans `~/Applications` (Spotlight : Cmd+Espace,
+« compare2mix » ; glisse-la dans le Dock si tu veux). Un double-clic :
+
+1. met le code à jour (`git pull`, sans jamais écraser une modification locale) et réinstalle les
+   dépendances si elles ont changé ;
+2. démarre l'interface en arrière-plan (journal : `~/.compare2mix/web.log`), ou la redémarre si le
+   code vient d'être mis à jour ;
+3. ouvre la page dans le navigateur.
+
+Pour l'arrêter : lien **Quitter** en haut de la page.
+
 ## Interface web locale (recommandé)
 
 ```bash

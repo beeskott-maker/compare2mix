@@ -183,6 +183,7 @@
     <h1>compare<span>2</span>mix</h1>
     <div class="row">
       <button class="linkbtn" id="settingsBtn">Réglages</button>
+      <button class="linkbtn" id="quitBtn">Quitter</button>
       <span class="pill" id="spotifyPill"><span class="dot"></span><span>Spotify…</span></span>
     </div>
   </header>
@@ -904,6 +905,13 @@ async function openSettings() {
   $("settings").hidden = false;
   $("setDownloads").focus();
 }
+$("quitBtn").addEventListener("click", async () => {
+  if (!confirm("Arrêter compare2mix ?")) return;
+  try { await api("/api/quit", {}); } catch (e) { toast(e.message, true); return; }
+  document.body.replaceChildren(el("div", { class: "wrap" }, el("div", { class: "panel stack", style: "margin-top:40px" },
+    el("h2", {}, "compare2mix est arrêté"),
+    el("p", { class: "lead" }, "Tu peux fermer cet onglet. Pour le relancer, double-clique sur l'application compare2mix."))));
+});
 $("settingsBtn").addEventListener("click", () => openSettings().catch((e) => toast(e.message, true)));
 $("setCancel").addEventListener("click", () => ($("settings").hidden = true));
 $("settings").addEventListener("click", (e) => { if (e.target === $("settings")) $("settings").hidden = true; });

@@ -213,3 +213,12 @@ def test_library_upload(server, tmp_path):
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(bad)
     assert e.value.code == 400
+
+def test_quit_button_stops_the_server(server):
+    base, app = server
+    stopped = threading.Event()
+    with pytest.raises(urllib.error.HTTPError):  # not started by serve(): refused
+        call(base, "/api/quit", {})
+    app.on_quit = stopped.set
+    assert call(base, "/api/quit", {}) == {"ok": True}
+    assert stopped.wait(2)

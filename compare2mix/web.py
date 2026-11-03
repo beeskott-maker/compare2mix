@@ -104,6 +104,7 @@ class App:
         self._discogs: discogs.Discogs | None = None
         self._discogs_token: str | None = None
         self.analyzer = analyzer or energy.Analyzer()
+        self.on_quit: Callable[[], None] | None = None  # set by serve()
         self.lock = threading.RLock()
         self.scan_lock = threading.Lock()
         self.library_lock = threading.Lock()
@@ -782,6 +783,11 @@ def make_handler(app: App):
                 if path == "/api/client-id":
                     app.set_client_id(body.get("client_id", ""))
                     return self._json(app.spotify_status())
+                if path == "/api/quit":
+                    if app.on_quit is None:
+                        raise ApiError("Arrêt impossible depuis la page.", 400)
+                    threading.Timer(0.3, app.on_quit).start()  # after the answer is sent
+                    return self._json({"ok": True})
                 if path == "/api/logout":
                     app.logout()
                     return self._json(app.spotify_status())
@@ -807,9 +813,10 @@ def serve(port: int = DEFAULT_PORT, open_browser: bool = True, library: str | No
     else:
         app.autoload()
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app))
+    app.on_quit = server.shutdown  # "Quitter" button
     url = f"http://127.0.0.1:{port}/"
     print(f"compare2mix est ouvert sur {url}")
-    print("Laisse cette fenêtre ouverte ; Ctrl+C pour arrêter.")
+    print("Laisse cette fenêtre ouverte ; Ctrl+C (ou « Quitter » dans la page) pour arrêter.")
     if open_browser:
         threading.Timer(0.5, webbrowser.open, args=(url,)).start()
     try:
