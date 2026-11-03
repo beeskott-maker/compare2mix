@@ -34,7 +34,7 @@
   p { margin: 0; }
   a { color: inherit; }
   code { font-family: var(--font-mono); font-size: 13px; background: var(--chip); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
-  input[type=text], select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; max-width: 100%; }
+  input[type=text], input[type=number], select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; max-width: 100%; }
 
   /* stepper */
   .stepper { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 16px 0 22px; padding: 0; list-style: none; }
@@ -130,18 +130,17 @@
   th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .note.alert { color: var(--ko); font-weight: 600; margin-top: 4px; font-family: var(--font-ui); }
-  .sp-artist { font-weight: 600; }
-  .sp-title { color: var(--muted); }
+  .sp-title { font-weight: 600; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
   .chip { font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 6px; border-radius: 5px; background: var(--chip); color: var(--muted); white-space: nowrap; }
   .chip.fmt { background: var(--fg); color: var(--panel); }
   tr.has-sub td { border-bottom: none; padding-bottom: 2px; }
   tr.sub td { padding-top: 0; }
   td.eq.alert { color: var(--ko); font-size: 15px; }
-  input.energy { width: 56px; font-size: 13px; padding: 4px 6px; }
-  input.genre { width: 100%; min-width: 130px; font-size: 13px; padding: 4px 8px; }
+  input.energy { width: 60px; font-size: inherit; padding: 4px 8px; }
+  input.genre { width: 100%; min-width: 130px; font-size: inherit; padding: 4px 8px; }
   td.eq { color: var(--muted); font-weight: 700; font-size: 18px; text-align: center; padding-left: 0; padding-right: 0; width: 1.5em; }
-  td.file { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; min-width: 180px; }
+  td.file { overflow-wrap: anywhere; min-width: 180px; }
   .status { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .status.found { background: var(--ok-bg); color: var(--ok); }
   .status.probable { background: var(--warn-bg); color: var(--warn); }
