@@ -232,7 +232,7 @@
   body.mode-correction #importView { display: none; }
   .folder { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .folder input { flex: 1 1 320px; }
-  .was { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .was { font-size: 11px; color: var(--muted); margin-bottom: 3px; white-space: nowrap; }
   .was s { text-decoration-color: var(--muted); }
   input.changed { border-color: var(--accent); background: #eef5ff; }
   .chip.rb { background: var(--warn-bg); color: var(--warn); }
@@ -427,7 +427,7 @@
       </div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th style="width:28px"></th><th>Fichier</th><th style="width:230px">Genre</th><th style="width:110px">Énergie</th></tr></thead>
+          <thead><tr><th style="width:28px"></th><th>Fichier</th><th style="width:230px">Genre</th><th style="width:170px">Énergie</th></tr></thead>
           <tbody id="corrRows"></tbody>
         </table>
       </div>
