@@ -139,6 +139,11 @@
   tr.has-sub td { border-bottom: none; padding-bottom: 2px; }
   tr.sub td { padding-top: 0; }
   td.eq.alert { color: var(--ko); font-size: 15px; }
+  .field { position: relative; display: inline-block; }
+  .field.wide { display: block; }
+  .field .spinner { display: none; position: absolute; right: 8px; top: 50%; margin-top: -7px; }
+  .field.loading .spinner { display: inline-block; }
+  .field.loading input { color: var(--muted); }
   input.energy { width: 60px; font-size: inherit; padding: 4px 8px; }
   input.genre { width: 100%; min-width: 130px; font-size: inherit; padding: 4px 8px; }
   td.eq { color: var(--muted); font-weight: 700; font-size: 18px; text-align: center; padding-left: 0; padding-right: 0; width: 1.5em; }
@@ -741,8 +746,10 @@ async function fetchEnergies(recap) {
     if (!m.energyEdited && info) m.energy = info.energy;
     m.mood = info ? info.mood : null;
     renderEnergy(m, err);
+    updateStart();
     if (err && /Essentia/.test(err)) { // not installed: no use trying the others
       for (const o of recap.matches) if (!o.energyLoaded) { o.energyLoaded = true; renderEnergy(o, err); }
+      updateStart();
       return;
     }
   }
@@ -750,18 +757,20 @@ async function fetchEnergies(recap) {
 
 function energyCell(m) {
   const input = el("input", { type: "number", min: "1", max: "10", step: "1", class: "energy",
-    "aria-label": "Énergie de " + m.spotify, placeholder: m.energyLoaded ? "–" : "…" });
+    "aria-label": "Énergie de " + m.spotify, placeholder: m.energyLoaded ? "–" : "" });
   if (m.energy) input.value = m.energy;
   input.addEventListener("input", () => { m.energy = parseInt(input.value, 10) || null; m.energyEdited = true; });
   const mood = el("div", { class: "note" }, m.mood || "");
   m.energyInput = input; m.moodEl = mood;
-  return el("div", {}, input, mood);
+  m.energyField = loadingField(input, !m.energyLoaded);
+  return el("div", {}, m.energyField, mood);
 }
 
 function renderEnergy(m, err) {
   if (!m.energyInput) return;
   if (!m.energyEdited) m.energyInput.value = m.energy || "";
   m.energyInput.placeholder = "–";
+  m.energyField.classList.remove("loading");
   if (err) m.energyInput.title = err;
   m.moodEl.textContent = m.mood || (err ? "non analysé" : "");
   if (err) m.moodEl.title = err;
@@ -777,6 +786,8 @@ async function fetchGenres(recap) {
     catch (e) { err = e.message; }
     m.genreLoaded = true;
     if (!m.genreEdited) m.genre = g || "";
+    if (m.genreField) m.genreField.classList.remove("loading");
+    updateStart();
     const input = m.genreInput;
     if (input && !m.genreEdited) {
       input.value = m.genre;
@@ -798,15 +809,22 @@ function audioChips(a) {
   return el("div", { class: "chips" }, chips);
 }
 
+// An input with a small spinner inside while its value is being computed.
+function loadingField(input, loading, wide) {
+  return el("span", { class: "field" + (wide ? " wide" : "") + (loading ? " loading" : "") }, input,
+    el("span", { class: "spinner", "aria-hidden": "true" }));
+}
+
 function genreInput(m) {
   const input = el("input", {
     type: "text", class: "genre", spellcheck: "false", "aria-label": "Genre de " + m.spotify,
-    placeholder: m.genreLoaded ? "non trouvé" : "recherche…",
+    placeholder: m.genreLoaded ? "non trouvé" : "",
   });
   input.value = m.genre || "";
   input.addEventListener("input", () => { m.genre = input.value; m.genreEdited = true; });
   m.genreInput = input;
-  return input;
+  m.genreField = loadingField(input, !m.genreLoaded, true);
+  return m.genreField;
 }
 
 function renderRecap() {
@@ -870,8 +888,10 @@ function renderRecap() {
 function updateStart() {
   const r = state.recap;
   const k = r && r.matches ? r.matches.filter((m) => m.on).length : 0;
-  $("startCopy").textContent = `Lancer la copie (${plural(k, "fichier", "fichiers")}) →`;
-  $("startCopy").disabled = !k || !r.destination.available;
+  // Wait until every genre and energy has been determined.
+  const pending = r && r.matches ? r.matches.some((m) => !m.genreLoaded || !m.energyLoaded) : false;
+  $("startCopy").textContent = pending ? "Analyse en cours…" : `Lancer la copie (${plural(k, "fichier", "fichiers")}) →`;
+  $("startCopy").disabled = pending || !k || !r.destination.available;
 }
 
 // ---------- step 5: transfer with progress ----------------------------------------
