@@ -208,6 +208,7 @@
   input.changed { border-color: var(--accent); background: var(--accent-soft); }
   .chip.rb { background: var(--warn-bg); color: var(--warn); }
   .subfolder { font-size: 12px; color: var(--muted); margin-left: 32px; }
+  .corr-progress { position: sticky; top: 0; z-index: 5; background: var(--panel); padding-block: 6px; display: flex; flex-direction: column; gap: 6px; }
   .confirm { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: var(--panel); }
   [hidden] { display: none !important; }
 </style>
@@ -370,6 +371,10 @@
       <div class="spread">
         <div><h2 id="corrTitle"></h2><p class="lead" id="corrLead"></p></div>
         <button class="btn small" id="corrRescan">Réanalyser</button>
+      </div>
+      <div class="corr-progress" id="corrProgress" hidden>
+        <div class="progress" role="progressbar" aria-label="Analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="corrBar"><i id="corrFill"></i></div>
+        <div class="note" id="corrEta"></div>
       </div>
       <div class="msg warn" id="corrRb" hidden></div>
       <div class="tabs" id="corrTabs">
@@ -1212,6 +1217,7 @@ async function corrScan() {
   $("corrRb").textContent = `${plural(inRb, "fichier est", "fichiers sont")} dans ta bibliothèque Rekordbox. `
     + "Rekordbox ne relit pas tout seul les tags d'un morceau déjà importé : après la correction, recharge les tags de ces morceaux pour voir le nouveau genre et l'énergie.";
   corr.filter = "todo";
+  corr.started = Date.now();
   $("corrRows").replaceChildren(...corr.files.map(corrRow));
   $("corrNav").hidden = !corr.files.length;
   corrRefresh();
@@ -1280,6 +1286,21 @@ function corrRefresh() {
     $("corrLead").textContent = n.pending
       ? `Analyse : ${total - n.pending} / ${total} · ${n.todo} à corriger · ${n.ok} déjà bons`
       : `${n.todo} à corriger · ${n.ok} déjà bons`;
+    // Progress of the analysis (genre and energy both determined), with time left.
+    const done = total - n.pending;
+    $("corrProgress").hidden = !total || !n.pending;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    $("corrFill").style.width = pct + "%";
+    $("corrBar").setAttribute("aria-valuenow", pct);
+    if (n.pending) {
+      const elapsed = (Date.now() - corr.started) / 1000;
+      let eta = "";
+      if (done >= 3 && elapsed > 5) {
+        const left = Math.round((elapsed / done) * n.pending / 60);
+        eta = left < 1 ? " · moins d'une minute restante" : ` · environ ${left} min restantes`;
+      }
+      $("corrEta").textContent = `${pct} % · ${done} / ${total} fichiers analysés${eta}`;
+    }
     document.querySelectorAll("#corrTabs .tab").forEach((t) => {
       const k = t.dataset.f;
       t.querySelector("span").textContent = k === "all" ? total : n[k];
