@@ -16,6 +16,8 @@ import json
 from collections import Counter
 import os
 import re
+import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -577,6 +579,18 @@ class App:
             },
         }
 
+    def reveal_music_dir(self) -> dict:
+        """Open the folder where the files were filed (Finder on macOS)."""
+        folder = self.import_settings()["music_dir"]
+        if not os.path.isdir(folder):
+            raise ApiError(f"Dossier introuvable : {folder}", 404)
+        opener = {"darwin": ["open"], "win32": ["explorer"]}.get(sys.platform, ["xdg-open"])
+        try:
+            subprocess.Popen([*opener, folder], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError as e:
+            raise ApiError(f"Impossible d'ouvrir le dossier : {e}") from e
+        return {"ok": True}
+
     def transfer_done(self) -> dict:
         """End of step 5: the Rekordbox export in Downloads has been used."""
         return {"export_archived": self.archive_downloads_export()}
@@ -965,6 +979,8 @@ def make_handler(app: App):
                 if path == "/api/correction/apply":
                     return self._json(app.correction_apply(body.get("path", ""), body.get("genre"),
                                                            body.get("comment")))
+                if path == "/api/reveal":
+                    return self._json(app.reveal_music_dir())
                 if path == "/api/transfer-done":
                     return self._json(app.transfer_done())
                 if path == "/api/import":

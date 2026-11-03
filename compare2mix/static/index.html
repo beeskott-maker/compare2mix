@@ -5,292 +5,333 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>compare2mix</title>
 <style>
-  /* Layout: a single column wizard; stepper on top, one panel per step, actions at the bottom. */
+  /* Layout: macOS-like window: a toolbar, the stepper under it, centred content and a bottom bar
+     that sticks to the bottom of the window. Light only (no dark mode). */
   :root {
-    --bg: #f5f6f3; --panel: #ffffff; --fg: #1c1d1b; --muted: #676a64; --line: #e1e3dd;
-    --accent: #1c9c4a; --accent-ink: #ffffff; --accent-soft: #e5f4ea;
-    --ok: #1c8a45; --warn: #a96f00; --ko: #c43d3d;
-    --orange: #c25e00; --ok-bg: #e5f4ea; --warn-bg: #fbf1d8; --ko-bg: #f9e6e6; --chip: #eceee9;
-    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --bg: #ffffff; --bar: #f6f6f8; --panel: #ffffff; --fg: #1d1d1f; --fg2: #3a3a3c; --muted: #6e6e73;
+    --line: #e3e3e6; --line2: #c7c7cc; --zebra: #f9f9fb; --chip: #ececef; --seg: #e6e6e9;
+    --accent: #0068da; --accent-dark: #0058bd; --accent-ink: #ffffff; --accent-soft: #e8f1fc;
+    --ok: #248a3d; --ok-bg: #e3f6e8; --warn: #a14900; --warn-bg: #fff2e2; --ko: #c4001a; --ko-bg: #fde8ea;
+    --orange: #c25e00;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #121412; --panel: #1b1e1b; --fg: #e9ebe6; --muted: #9a9e96; --line: #2d312c;
-      --accent: #2fbf63; --accent-ink: #08130b; --accent-soft: #173322;
-      --ok: #4fd082; --warn: #e5b445; --ko: #ef7a7a;
-      --ok-bg: #173322; --warn-bg: #352a10; --ko-bg: #3a1c1c; --chip: #272b26;
-      color-scheme: dark;
-    }
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-ui); }
-  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px 48px; }
-  header { padding-top: 18px; }
-  h1 { font-size: 19px; margin: 0; letter-spacing: -.01em; }
-  h1 span { color: var(--accent); }
-  h2 { font-size: 20px; margin: 0 0 4px; text-wrap: balance; }
-  h3 { font-size: 15px; margin: 0; }
+  html, body { background: var(--bg); }
+  body { margin: 0; color: var(--fg); font: 13px/1.4 var(--font-ui); min-height: 100vh; display: flex; flex-direction: column; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; font-weight: 700; text-wrap: balance; }
+  h2 { font-size: 15px; margin: 0; font-weight: 700; text-wrap: balance; }
+  h3 { font-size: 13px; margin: 0; }
   p { margin: 0; }
-  a { color: inherit; }
-  code { font-family: var(--font-mono); font-size: 13px; background: var(--chip); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
-  input[type=text], input[type=number], select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; max-width: 100%; }
+  a { color: var(--accent); }
+  code { font-family: var(--font-mono); font-size: 12px; background: var(--chip); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  input[type=text], input[type=number], input[type=password], input[type=search], select {
+    font: inherit; color: var(--fg); background: #ffffff; border: 1px solid var(--line2); border-radius: 6px;
+    padding: 4px 8px; min-width: 0; max-width: 100%; }
+  input:focus-visible, select:focus-visible { outline: 3px solid rgba(0,104,218,.35); outline-offset: 0; border-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); }
+
+  /* toolbar */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--bar); }
+  .brand { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+  .logo { width: 24px; height: 24px; border-radius: 6px; background: #111111; display: grid; place-items: center; }
+  .logo i { width: 14px; height: 14px; border-radius: 50%; background: #2fbf63; }
+  .grow { flex: 1; }
+  .seg { display: inline-flex; background: var(--seg); border-radius: 7px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+  .seg button { font: inherit; border: 0; border-radius: 5px; padding: 3px 14px; background: transparent; color: var(--fg2); cursor: pointer; }
+  .seg button.on, .seg button.active { background: #ffffff; color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ind { display: inline-flex; align-items: center; gap: 5px; color: var(--fg2); }
+  .ind svg { flex: none; }
+  .ind .on-icon { display: none; } .ind .off-icon { display: inline; }
+  .ind.on .on-icon { display: inline; } .ind.on .off-icon { display: none; }
+  .iconbtn { width: 30px; height: 28px; border: 0; border-radius: 6px; background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--fg2); }
+  .iconbtn:hover { background: var(--chip); }
+  .iconbtn:focus-visible { outline: 2px solid var(--accent); }
 
   /* stepper */
-  .stepper { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 16px 0 22px; padding: 0; list-style: none; }
-  .stepper button { width: 100%; border: 0; background: none; padding: 0; text-align: left; color: var(--muted); cursor: pointer; font: inherit; }
-  .stepper button:disabled { cursor: not-allowed; opacity: .55; }
-  .stepper .bar { height: 4px; border-radius: 2px; background: var(--line); margin-bottom: 8px; }
-  .stepper .lbl { font-size: 13px; display: flex; gap: 6px; align-items: baseline; }
-  .stepper .n { font-weight: 700; font-variant-numeric: tabular-nums; }
-  .stepper .done .bar { background: var(--accent); opacity: .45; }
-  .stepper .current .bar { background: var(--accent); }
-  .stepper .current { color: var(--fg); font-weight: 600; }
-  .stepper button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+  .stepbar { border-bottom: 1px solid var(--line); padding: 14px 20px; }
+  .stepper { list-style: none; margin: 0 auto; padding: 0; max-width: 1080px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .stepper li { display: flex; align-items: center; gap: 8px; flex: 1 1 140px; }
+  .stepper li:last-child { flex: 0 1 auto; }
+  .stepper li:not(:last-child)::after { content: ""; flex: 1; height: 2px; min-width: 16px; border-radius: 1px; background: #d9d9de; }
+  .stepper li.passed::after { background: var(--accent); }
+  .stepper button { display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 0; font: inherit; color: var(--muted); cursor: pointer; }
+  .stepper button:disabled { cursor: default; }
+  .stepper .n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #e5e5ea; color: var(--muted); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .stepper .done { color: var(--fg); }
+  .stepper .done .n { background: var(--accent); color: #ffffff; font-size: 0; }
+  .stepper .done .n::after { content: "✓"; font-size: 12px; }
+  .stepper .current { color: var(--fg); font-weight: 700; }
+  .stepper .current .n { background: #ffffff; border: 2px solid var(--accent); color: var(--accent); }
+  .stepper button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
-  .panel + .panel { margin-top: 16px; }
-  .stack { display: grid; gap: 16px; }
+  /* page */
+  #importView, #correctionView { flex: 1; display: flex; flex-direction: column; }
+  .step { flex: 1; display: flex; flex-direction: column; }
+  .page { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 16px; }
+  .page.narrow { max-width: 760px; padding-top: 36px; }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+  .box { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
   .lead { color: var(--muted); }
   .note { color: var(--muted); font-size: 12px; }
-  .muted { color: var(--muted); font-size: 13px; }
+  .muted { color: var(--muted); }
   .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .spread { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
-  .nav { display: flex; gap: 8px; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; }
-  .btn { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); padding: 8px 14px; cursor: pointer; }
-  .btn:hover:not(:disabled) { border-color: var(--muted); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-  .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .btn.small { padding: 3px 10px; font-size: 13px; }
-  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .linkbtn { border: 0; background: none; padding: 0; font: inherit; color: var(--muted); text-decoration: underline; cursor: pointer; }
+  .spread { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+  /* bottom bar: sticks to the bottom of the window */
+  .nav { position: sticky; bottom: 0; z-index: 10; border-top: 1px solid var(--line); background: var(--bar); }
+  .nav > .in { max-width: 1120px; margin: 0 auto; padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end; }
+  .nav .info { flex: 1 1 300px; min-width: 0; color: var(--fg2); }
 
-  .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 13px; background: var(--ko-bg); color: var(--ko); }
-  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-  .pill.on { background: var(--ok-bg); color: var(--ok); }
-  .msg { border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  /* buttons */
+  .btn { font: inherit; border-radius: 6px; border: 1px solid var(--line2); background: #ffffff; color: var(--fg); padding: 4px 14px; cursor: pointer; box-shadow: 0 1px 1px rgba(0,0,0,.05); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover:not(:disabled) { background: #f7f7f9; }
+  .btn.primary { background: var(--accent); border-color: var(--accent-dark); color: var(--accent-ink); font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-dark); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.small { padding: 2px 10px; }
+  .btn:focus-visible { outline: 3px solid rgba(0,104,218,.35); outline-offset: 1px; }
+  .linkbtn { border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+  .msg { border-radius: 8px; padding: 10px 12px; }
   .msg.ko { background: var(--ko-bg); color: var(--ko); }
   .msg.warn { background: var(--warn-bg); color: var(--warn); }
 
   /* step 1 */
-  #plSelect { justify-self: start; width: auto; }
+  .formrows { border: 1px solid var(--line); border-radius: 10px; }
+  .formrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; }
+  .formrow + .formrow { border-top: 1px solid var(--chip); }
+  .formrow > label, .formrow > .lbl { flex: 1 1 160px; }
 
   /* step 2 */
-  ol.howto { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
-  .kbd { font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; background: var(--bg); white-space: nowrap; }
-  .or { display: flex; align-items: center; gap: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; margin-block: 6px; }
-  .or::before, .or::after { content: ""; flex: 1; height: 2px; border-radius: 1px; background: var(--accent); opacity: .55; }
-  .or span { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 17px; }
-  .drop { display: grid; gap: 4px; justify-items: center; text-align: center; border: 2px dashed var(--line); border-radius: 10px; padding: 22px 16px; cursor: pointer; color: var(--muted); transition: border-color .15s, background .15s; }
+  ol.howto { margin: 0; padding: 12px 14px 12px 34px; border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .kbd { font-weight: 600; }
+  .or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-weight: 700; font-size: 12px; letter-spacing: .06em; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .drop { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; border: 2px dashed var(--line2); border-radius: 12px; padding: 28px 20px; cursor: pointer; color: var(--muted); transition: border-color .15s, background .15s; }
   .drop b { color: var(--fg); }
   .drop:hover, .drop.over, .drop:focus-within { border-color: var(--accent); background: var(--accent-soft); }
 
   /* step 3 */
-  .found { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; min-width: 0; }
-  .fileicon { width: 46px; height: 56px; border-radius: 6px; background: var(--accent-soft); color: var(--ok); display: grid; place-items: center; font: 700 12px var(--font-mono); }
+  .found { display: flex; gap: 12px; align-items: center; min-width: 0; flex: 1 1 260px; }
+  .fileicon { flex: none; width: 34px; height: 40px; border-radius: 5px; border: 1px solid #d9d9dc; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 5px; font-size: 9px; font-weight: 700; color: var(--ok); }
   .facts { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
-  .facts > .fact { flex: 1 1 150px; }
-  .facts-arrow { align-self: center; color: var(--muted); font-size: 20px; }
-  .fact { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
-  .fact b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
-  .fact span { color: var(--muted); font-size: 13px; }
-  button.fact { font: inherit; color: inherit; text-align: left; background: transparent; border: 2px solid var(--line); cursor: pointer; transition: border-color .15s, background-color .15s; }
-  button.fact:hover { border-color: var(--accent); background: var(--bg); }
+  .facts > .fact { flex: 1 1 170px; }
+  .facts-arrow { align-self: center; color: #8e8e93; font-size: 18px; }
+  .fact { border-radius: 10px; padding: 12px 14px; background: #f5f5f7; }
+  .fact b { display: block; font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .fact span { color: var(--muted); }
+  button.fact { font: inherit; color: var(--fg); text-align: left; background: #ffffff; border: 2px solid var(--line); padding: 10px 12px; cursor: pointer; transition: border-color .15s, background-color .15s; }
+  button.fact:hover { border-color: var(--accent); background: #f7f7f9; }
   button.fact.on { border-color: var(--accent); background: var(--accent-soft); }
-  .tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .tab { border: 0; border-radius: 999px; padding: 4px 12px; font: 600 14px var(--font-ui); background: var(--chip); color: var(--muted); cursor: pointer; }
-  .tab.ko { background: var(--ko-bg); color: var(--ko); }
-  .tab.ok { background: var(--ok-bg); color: var(--ok); }
-  .tab.warn { background: var(--warn-bg); color: var(--warn); }
-  .tab.active { outline: 2px solid currentColor; outline-offset: -2px; }
-  .tabs input { flex: 0 1 220px; margin-left: auto; }
-  .results { display: grid; gap: 6px; }
-  .card { padding: 9px 12px; border-radius: 8px; background: var(--bg); border-left: 3px solid var(--muted); }
-  .card.missing { border-left-color: var(--ko); }
-  .card.copied { opacity: .45; border-left-color: var(--muted); }
-  .copied-mark { display: none; font-size: 12px; color: var(--muted); }
-  .card.copied .copied-mark { display: inline; }
-  .copied-mark button { font-size: 12px; }
-  .card.probable { border-left-color: var(--warn); }
-  .card.found { border-left-color: var(--ok); }
+  button.fact.on span { color: var(--fg); }
+  .listbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .listbar input[type=search] { width: 200px; background: var(--chip); border-color: transparent; border-radius: 7px; }
+  .tabs { display: inline-flex; background: var(--seg); border-radius: 7px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+  .tab { font: inherit; border: 0; border-radius: 5px; padding: 3px 12px; background: transparent; color: var(--fg2); cursor: pointer; }
+  .tab.active { background: #ffffff; color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* list = macOS table */
+  .results { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .results > .thead, .cols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) 60px 140px; gap: 12px; align-items: baseline; }
+  .results > .thead { padding: 6px 14px; font-size: 11px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); background: #fbfbfd; }
+  .card { padding: 7px 14px; background: #ffffff; }
+  .card:nth-child(odd) { background: var(--zebra); }
+  .card + .card { border-top: 1px solid #f0f0f2; }
+  .card.copied { color: #a1a1a6; }
+  .card.copied a.sp { color: #a1a1a6; }
+  .copied-mark { display: none; font-size: 11px; color: var(--muted); text-align: right; }
+  .card.copied .copied-mark { display: block; }
+  .dur { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   .line1 { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
   .sp { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-  a.sp { cursor: copy; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
-  .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+  a.sp { cursor: copy; color: inherit; text-decoration: none; }
+  a.sp:hover { color: var(--accent); text-decoration: underline; }
+  .badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--muted); }
   .badge.manual, .badge.import { background: var(--ok-bg); color: var(--ok); }
-  .rb { margin-top: 2px; font-size: 14px; overflow-wrap: anywhere; }
-  .notes { margin: 2px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+  .rb { margin-top: 2px; overflow-wrap: anywhere; color: var(--fg2); }
+  .notes { margin: 2px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
   .notes li::before { content: "· "; }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
   .search-box { margin-top: 8px; display: grid; gap: 6px; }
-  .hit { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 6px 10px; border-radius: 6px; background: var(--panel); font-size: 14px; }
+  .hit { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 6px 10px; border-radius: 6px; background: #ffffff; border: 1px solid var(--line); }
   .empty { text-align: center; color: var(--muted); padding: 24px; }
 
   /* step 4 */
-  .ratio { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .ratio .big { font-size: 44px; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; }
-  .ratio .of { font-size: 22px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .meter { height: 10px; border-radius: 5px; background: var(--chip); overflow: hidden; }
-  .meter i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 5px; }
-  .tablewrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
-  td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .note.alert { color: var(--ko); font-weight: 600; margin-top: 4px; font-family: var(--font-ui); }
+  .ratio { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .ratio .big { font-size: 30px; font-weight: 700; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .ratio .of { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meter, .progress { height: 6px; border-radius: 3px; background: #e5e5ea; overflow: hidden; }
+  .meter i, .progress i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width .35s ease; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; padding: 7px 10px; border-bottom: 1px solid var(--line); background: #fbfbfd; }
+  td { padding: 9px 10px; vertical-align: top; border-top: 1px solid #f0f0f2; }
+  tbody tr.z td { background: var(--zebra); }
+  .note.alert { color: var(--ko); font-weight: 600; margin-top: 4px; }
   .sp-title { font-weight: 600; }
+  .sp-artist { color: var(--fg2); }
   .fname { display: flex; gap: 8px; align-items: flex-start; }
-  button.play { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); font-size: 10px; line-height: 24px; text-align: center; padding: 0; cursor: pointer; margin-top: -1px; }
-  button.play.on { background: var(--fg); color: var(--panel); }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; margin-left: 32px; }
-  .chip { font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 6px; border-radius: 5px; background: var(--chip); color: var(--muted); white-space: nowrap; }
-  .chip.absent { display: inline-block; margin-top: 4px; background: var(--warn-bg); color: var(--warn); }
-  .chip.fmt { background: var(--fg); color: var(--panel); }
-  tr.has-sub td { border-bottom: none; padding-bottom: 2px; }
-  tr.sub td { padding-top: 0; }
-  td.eq.alert { color: var(--ko); font-size: 15px; }
+  button.play { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--accent); color: #ffffff; font-size: 9px; line-height: 22px; text-align: center; padding: 0; cursor: pointer; }
+  button.play.on { background: var(--fg); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; margin-left: 30px; }
+  .chip { font-size: 10px; font-weight: 600; line-height: 1.3; padding: 1px 5px; border-radius: 4px; background: var(--chip); color: var(--fg2); white-space: nowrap; }
+  .chip.absent { display: inline-block; margin-top: 4px; background: var(--warn-bg); color: var(--warn); font-size: 11px; }
+  .chip.fmt { background: var(--fg2); color: #ffffff; font-weight: 700; }
+  tr.has-sub td { padding-bottom: 2px; }
+  tr.sub td { padding-top: 0; border-top: 0; }
+  td.eq.alert { color: var(--ko); font-size: 13px; }
   .field { position: relative; display: inline-block; }
   .field.wide { display: block; }
   .field .spinner { display: none; position: absolute; right: 8px; top: 50%; margin-top: -7px; }
   .field.loading .spinner { display: inline-block; }
   .field.loading input { color: var(--muted); }
-  input.energy { width: 60px; font-size: inherit; padding: 4px 8px; }
-  input.genre { width: 100%; min-width: 130px; font-size: inherit; padding: 4px 8px; }
-  td.eq { color: var(--muted); font-weight: 700; font-size: 18px; text-align: center; padding-left: 0; padding-right: 0; width: 1.5em; }
+  input.energy { width: 58px; padding: 3px 7px; }
+  input.genre { width: 100%; min-width: 130px; padding: 3px 7px; }
+  td.eq { color: #8e8e93; font-weight: 700; text-align: center; padding-left: 0; padding-right: 0; width: 1.5em; }
   td.file { overflow-wrap: anywhere; min-width: 180px; }
-  .status { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .status.found, .status.check { display: inline-block; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
   .status.found { background: var(--ok-bg); color: var(--ok); }
-  .status.probable { background: var(--warn-bg); color: var(--warn); }
   .status.check { background: var(--orange); color: #ffffff; }
-  details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  details summary { cursor: pointer; color: var(--fg2); }
   details[open] summary { margin-bottom: 8px; }
-  .dest { background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
 
   /* step 5 */
-  .progress { height: 14px; border-radius: 7px; background: var(--chip); overflow: hidden; }
-  .progress i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 7px; transition: width .35s ease; }
-  .tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  .tasks li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 14px; color: var(--muted); }
+  .tasks { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; }
+  .tasks:empty { display: none; }
+  .tasks li { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 10px 14px; color: var(--muted); }
+  .tasks li + li { border-top: 1px solid #f0f0f2; }
   .tasks li.run { color: var(--fg); font-weight: 600; }
   .tasks li.ok { color: var(--fg); }
+  .tasks li.ok .ic { color: var(--ok); font-weight: 700; }
   .tasks li.err { color: var(--ko); }
   .tasks li .ic { text-align: center; }
   .tasks li .t { min-width: 0; overflow-wrap: anywhere; }
-  .done-card { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
+  .done-card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid #c9e3d0; border-radius: 10px; padding: 12px 14px; }
 
-  /* settings overlay */
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: start center; padding: 40px 16px; overflow-y: auto; z-index: 20; }
-  .overlay .panel { width: min(640px, 100%); }
+  /* settings */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: grid; place-items: start center; padding: 60px 16px; overflow-y: auto; z-index: 20; }
+  .sheet { width: min(620px, 100%); background: #ffffff; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.25); padding: 20px; display: flex; flex-direction: column; gap: 14px; }
   .form-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 12px; align-items: center; }
-  .form-grid label { color: var(--muted); font-size: 14px; }
-  label.check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
+  .form-grid label { color: var(--fg2); text-align: right; }
+  label.check { display: inline-flex; gap: 6px; align-items: center; color: var(--fg2); text-align: left !important; }
 
-  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; z-index: 30; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 70px; background: rgba(29,29,31,.92); color: #ffffff; padding: 7px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; z-index: 30; }
   .toast.show { opacity: 1; }
-  .toast.error { background: var(--ko); color: #fff; }
+  .toast.error { background: var(--ko); }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .progress i, .toast { transition: none; } .spinner { animation: none; } }
-  @media (max-width: 560px) {
-    .wrap { padding: 0 16px 40px; }
+  @media (prefers-reduced-motion: reduce) { .progress i, .meter i, .toast { transition: none; } .spinner { animation: none; } }
+  @media (max-width: 620px) {
     .stepper .name { display: none; }
-    .ratio .big { font-size: 36px; }
     .form-grid { grid-template-columns: 1fr; }
-    .tabs input { flex-basis: 100%; margin-left: 0; }
+    .form-grid label { text-align: left; }
+    .results > .thead, .cols { grid-template-columns: minmax(0, 1fr) 50px; }
+    .results > .thead span:nth-child(2), .results > .thead span:nth-child(4), .cols > :nth-child(2) { display: none; }
   }
-  .modes { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; }
-  .modes button { font: inherit; font-size: 14px; font-weight: 600; border: 0; background: none; color: var(--muted); padding: 3px 14px; border-radius: 999px; cursor: pointer; }
-  .modes button.on { background: var(--panel); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
   body.mode-correction #importView { display: none; }
   .folder { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .folder input { flex: 1 1 280px; }
-  .was { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .folder input { flex: 1 1 320px; }
+  .was { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
   .was s { text-decoration-color: var(--muted); }
-  input.changed { border-color: var(--accent); background: var(--accent-soft); }
+  input.changed { border-color: var(--accent); background: #eef5ff; }
   .chip.rb { background: var(--warn-bg); color: var(--warn); }
-  .subfolder { font-size: 12px; color: var(--muted); margin-left: 32px; }
-  .corr-progress { position: sticky; top: 0; z-index: 5; background: var(--panel); padding-block: 6px; display: flex; flex-direction: column; gap: 6px; }
-  .confirm { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: var(--panel); }
+  .subfolder { font-size: 12px; color: var(--muted); margin-left: 30px; }
+  .corr-progress { position: sticky; top: 0; z-index: 5; background: #ffffff; padding-block: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .confirm { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: #ffffff; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="spread">
-    <div class="row" style="gap:16px">
-      <h1>compare<span>2</span>mix</h1>
-      <div class="modes" role="tablist" aria-label="Mode">
-        <button role="tab" id="modeImport" class="on" aria-selected="true">Import</button>
-        <button role="tab" id="modeCorrection" aria-selected="false">Correction</button>
-      </div>
-    </div>
-    <div class="row">
-      <button class="linkbtn" id="settingsBtn">Réglages</button>
-      <button class="linkbtn" id="quitBtn">Quitter</button>
-      <span class="pill" id="spotifyPill"><span class="dot"></span><span>Spotify…</span></span>
-    </div>
-  </header>
+<header class="toolbar">
+  <div class="brand"><span class="logo" aria-hidden="true"><i></i></span>compare2mix</div>
+  <div class="seg" role="tablist" aria-label="Mode">
+    <button role="tab" id="modeImport" class="on" aria-selected="true">Import</button>
+    <button role="tab" id="modeCorrection" aria-selected="false">Correction</button>
+  </div>
+  <span class="grow"></span>
+  <span class="ind" id="spotifyPill">
+    <svg class="on-icon" role="img" aria-label="Connecté" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#248a3d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1.8v3M10 1.8v3"/><path d="M4.3 4.8h7.4v2.4a3.7 3.7 0 0 1-7.4 0z"/><path d="M8 10.9v3.3"/></svg>
+    <svg class="off-icon" role="img" aria-label="Non connecté" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#c4001a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1.8v3M10 1.8v3"/><path d="M4.3 4.8h7.4v2.4a3.7 3.7 0 0 1-7.4 0z"/><path d="M8 12.4v1.8"/><path d="M2 14.5L14.5 2"/></svg>
+    <span>Spotify…</span>
+  </span>
+  <span class="ind" id="keyPill" hidden>
+    <svg class="on-icon" role="img" aria-label="Branchée" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#248a3d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="1.5" width="5" height="4" rx="0.5"/><rect x="4" y="5.5" width="8" height="9" rx="1.6"/><path d="M7 3.3h0.01M9 3.3h0.01"/></svg>
+    <svg class="off-icon" role="img" aria-label="Non branchée" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#c4001a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="1.5" width="5" height="4" rx="0.5"/><rect x="4" y="5.5" width="8" height="9" rx="1.6"/><path d="M2 14.5L14.5 2"/></svg>
+    <span>Clé</span>
+  </span>
+  <button class="iconbtn" id="settingsBtn" aria-label="Réglages" title="Réglages">
+    <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+</header>
 
-  <div id="importView">
-  <ol class="stepper" id="stepper">
-    <li><button data-go="1"><div class="bar"></div><div class="lbl"><span class="n">1</span><span class="name">Playlist</span></div></button></li>
-    <li><button data-go="2"><div class="bar"></div><div class="lbl"><span class="n">2</span><span class="name">Exporter</span></div></button></li>
-    <li><button data-go="3"><div class="bar"></div><div class="lbl"><span class="n">3</span><span class="name">Manquants</span></div></button></li>
-    <li><button data-go="4"><div class="bar"></div><div class="lbl"><span class="n">4</span><span class="name">Récapitulatif</span></div></button></li>
-    <li><button data-go="5"><div class="bar"></div><div class="lbl"><span class="n">5</span><span class="name">Copie</span></div></button></li>
-  </ol>
+<div id="importView">
+  <nav class="stepbar" aria-label="Étapes">
+    <ol class="stepper" id="stepper">
+      <li><button data-go="1"><span class="n">1</span><span class="name">Playlist</span></button></li>
+      <li><button data-go="2"><span class="n">2</span><span class="name">Exporter</span></button></li>
+      <li><button data-go="3"><span class="n">3</span><span class="name">Manquants</span></button></li>
+      <li><button data-go="4"><span class="n">4</span><span class="name">Récapitulatif</span></button></li>
+      <li><button data-go="5"><span class="n">5</span><span class="name">Copie</span></button></li>
+    </ol>
+  </nav>
 
   <!-- STEP 1: Spotify playlist -->
   <section class="step" data-step="1">
-    <div class="panel stack">
-      <h3><label for="plSelect">Playlist Spotify</label></h3>
+    <div class="page narrow">
+      <h1>Playlist Spotify</h1>
       <div id="spLogin" class="stack" hidden>
         <div id="cidRow" class="stack" hidden>
           <p class="lead">Colle le <b>Client ID</b> de ton app Spotify (developer.spotify.com → ton app → Settings).
             Sa Redirect URI doit être <code id="redirectUri"></code>.</p>
           <div class="row"><input type="text" id="clientId" placeholder="Client ID" spellcheck="false"><button class="btn" id="cidSave">Enregistrer</button></div>
         </div>
-        <a href="/login" id="loginLink"><button class="btn primary">Se connecter à Spotify</button></a>
+        <a href="/login" id="loginLink" class="btn primary" style="align-self:flex-start">Se connecter à Spotify</a>
       </div>
-      <select id="plSelect" hidden><option>Chargement des playlists…</option></select>
+      <div class="formrows" id="plRows">
+        <div class="formrow">
+          <label for="plSelect">Playlist à comparer</label>
+          <select id="plSelect" hidden><option>Chargement des playlists…</option></select>
+        </div>
+      </div>
+      <p class="note">Seules les playlists dont tu es propriétaire ou collaborateur sont listées.</p>
     </div>
-    <div class="nav"><span></span><button class="btn primary" id="next1" disabled>Suivant →</button></div>
+    <div class="nav"><div class="in"><button class="btn primary" id="next1" disabled>Suivant</button></div></div>
   </section>
 
   <!-- STEP 2: export the Rekordbox library -->
   <section class="step" data-step="2" hidden>
-    <div class="panel stack">
-      <div>
-        <h2>Exporte ta bibliothèque Rekordbox</h2>
-        <p class="lead">Merci d'exporter ta bibliothèque dans ton dossier Téléchargements.</p>
-      </div>
+    <div class="page narrow">
+      <h1>Exporte ta bibliothèque Rekordbox</h1>
       <ol class="howto">
-        <li>Ouvre Rekordbox, menu <span class="kbd">Fichier</span> → <span class="kbd">Exporter la collection au format xml</span>.</li>
-        <li>Choisis le dossier <b>Téléchargements</b> comme destination. Le nom du fichier n'a pas d'importance.</li>
-        <li>Clique sur <b>Enregistrer</b>, puis reviens ici.</li>
+        <li>Dans Rekordbox, menu <span class="kbd">Fichier</span> › <span class="kbd">Exporter la collection au format xml</span>.</li>
+        <li>Enregistre le fichier dans <b>Téléchargements</b>. Son nom n'a pas d'importance.</li>
+        <li>Reviens ici et clique sur <b>C'est fait, comparer</b> : le fichier est trouvé tout seul.</li>
       </ol>
-      <div class="or"><span>ou</span></div>
+      <div class="or">OU</div>
       <label class="drop" id="drop">
         <input type="file" id="libFile" accept=".xml,application/xml,text/xml" hidden>
+        <svg aria-hidden="true" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#0068da" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-6M9.5 13.5L12 11l2.5 2.5"/></svg>
         <span><b>Dépose ici ton fichier XML Rekordbox</b></span>
         <span>ou clique pour le choisir (par exemple sur ta clé USB)</span>
       </label>
       <div class="msg ko" id="exportError" hidden></div>
     </div>
-    <div class="nav"><button class="btn" data-go="1">← Retour</button><button class="btn primary" id="next2">C'est fait, comparer →</button></div>
+    <div class="nav"><div class="in"><button class="btn" data-go="1">Retour</button><button class="btn primary" id="next2">C'est fait, comparer</button></div></div>
   </section>
 
   <!-- STEP 3: library + missing tracks -->
   <section class="step" data-step="3" hidden>
-    <div class="panel stack">
-      <div class="spread">
+    <div class="page">
+      <div class="box spread">
         <div class="found">
-          <div class="fileicon">XML</div>
-          <div>
-            <div><b>Bibliothèque Rekordbox :</b> <b id="libName"></b></div>
+          <div class="fileicon" aria-hidden="true">XML</div>
+          <div style="min-width:0">
+            <div style="font-weight:600">Bibliothèque Rekordbox : <span id="libName"></span></div>
             <div class="note" id="libWhere"></div>
           </div>
         </div>
-        <button class="btn small" id="reread">Relire</button>
+        <button class="btn" id="reread">Relire</button>
       </div>
       <div class="facts">
         <div class="fact"><b id="factTracks">–</b><span>tracks dans Rekordbox</span></div>
@@ -299,109 +340,110 @@
         <span class="facts-arrow" aria-hidden="true" id="factPlus">+</span>
         <button class="fact pick" data-view="absent" aria-pressed="false" id="factKeyBox"><b id="factKey">–</b><span id="factKeyLbl">tracks absents de la clé</span></button>
       </div>
-    </div>
-    <div class="panel stack">
-      <div class="spread">
-        <div>
+      <div class="stack" style="gap:10px">
+        <div class="spread">
           <h2 id="listTitle">Vus sur Spotify mais absents de Rekordbox</h2>
-          <p class="lead" id="listLead">Playlist <b id="plName"></b> · <span id="plCount"></span> morceaux. Clique sur un titre pour copier son lien Spotify.</p>
+          <div class="listbar">
+            <button class="btn small" id="resetCopied" hidden>Tout réactiver</button>
+            <div class="tabs" id="tabs" role="tablist" aria-label="Filtre">
+              <button class="tab" data-filter="missing">Manquants <span></span></button>
+              <button class="tab" data-filter="probable">À vérifier <span></span></button>
+              <button class="tab" data-filter="found">Trouvés <span></span></button>
+            </div>
+            <input type="search" id="filterText" placeholder="Rechercher" aria-label="Rechercher un morceau">
+          </div>
         </div>
-        <div class="row"><button class="btn" id="resetCopied" hidden>Tout réactiver</button></div>
+        <p class="note" id="listLead">Playlist <b id="plName"></b> · <span id="plCount"></span> morceaux. Clique sur un titre pour copier son lien Spotify.</p>
+        <div class="results" id="results"><div class="empty"><span class="spinner"></span> Comparaison en cours…</div></div>
       </div>
-      <div class="tabs" id="tabs">
-        <button class="tab ko" data-filter="missing">❌ Manquants <span></span></button>
-        <button class="tab warn" data-filter="probable">🟡 À vérifier <span></span></button>
-        <button class="tab ok" data-filter="found">✅ Trouvés <span></span></button>
-        <input type="text" id="filterText" placeholder="Filtrer…">
-      </div>
-      <div class="results" id="results"><div class="empty"><span class="spinner"></span> Comparaison en cours…</div></div>
     </div>
-    <div class="nav"><button class="btn" data-go="2">← Retour</button><button class="btn primary" id="next3">J'ai téléchargé des morceaux, vérifier →</button></div>
+    <div class="nav"><div class="in"><button class="btn" data-go="2">Retour</button><button class="btn primary" id="next3">J'ai téléchargé des morceaux, vérifier</button></div></div>
   </section>
 
   <!-- STEP 4: recap -->
   <section class="step" data-step="4" hidden>
-    <div class="panel stack">
+    <div class="page">
       <div class="spread">
         <div>
-          <h2>Récapitulatif</h2>
-          <p class="lead">Fichiers audio trouvés dans <span id="recapDir">Téléchargements</span>, comparés aux morceaux manquants.</p>
+          <h1>Récapitulatif</h1>
+          <p class="lead">Fichiers trouvés dans <span id="recapDir">Téléchargements</span>, comparés aux morceaux manquants.</p>
         </div>
-        <button class="btn small" id="recheck">Revérifier</button>
+        <button class="btn" id="recheck">Revérifier</button>
       </div>
       <div id="recapBody"><div class="empty"><span class="spinner"></span> Vérification…</div></div>
     </div>
-    <div class="nav"><button class="btn" data-go="3">← Retour</button><button class="btn primary" id="startCopy" disabled>Lancer la copie →</button></div>
+    <div class="nav"><div class="in"><span class="info" id="recapDest"></span><button class="btn" data-go="3">Retour</button><button class="btn primary" id="startCopy" disabled>Lancer la copie</button></div></div>
   </section>
 
   <!-- STEP 5: transfer -->
   <section class="step" data-step="5" hidden>
-    <div class="panel stack">
+    <div class="page narrow">
       <div>
-        <h2 id="copyTitle">Copie en cours…</h2>
+        <h1 id="copyTitle">Copie en cours…</h1>
         <p class="lead" id="copyLead">Ne débranche pas la clé.</p>
       </div>
       <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="pbar"><i id="pfill"></i></div>
       <ul class="tasks" id="tasks"></ul>
       <div class="done-card" id="doneCard" hidden>
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#0068da" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4M8 4.8h0.01"/></svg>
         <div id="doneText"></div>
-        <div class="row"><button class="btn" id="restart">Recommencer</button></div>
       </div>
     </div>
-    <div class="nav"><button class="btn" data-go="4" id="back5">← Retour</button><span></span></div>
+    <div class="nav"><div class="in"><button class="btn" data-go="4" id="back5">Retour</button><button class="btn" id="reveal" hidden>Afficher dans le Finder</button><button class="btn primary" id="restart" hidden>Terminé</button></div></div>
   </section>
-  </div>
 </div>
 
 <!-- Correction: genre and energy of the files of a folder (names never change) -->
-<div class="wrap" id="correctionView" hidden>
-  <div class="stack">
-    <div class="panel stack">
-      <div>
-        <h2>Correction de fichiers</h2>
-        <p class="lead">Analyse les fichiers audio d'un dossier et propose le genre et l'énergie. Les fichiers gardent leur nom et leur place : Rekordbox les retrouve toujours. Rien n'est modifié avant que tu valides.</p>
-      </div>
+<div id="correctionView" hidden>
+  <div class="page">
+    <div class="box stack" style="gap:10px">
       <div class="folder">
-        <input type="text" id="corrFolder" spellcheck="false" aria-label="Dossier à analyser" placeholder="/Volumes/BSK/_Musique">
+        <label for="corrFolder" style="font-weight:600">Dossier</label>
+        <input type="text" id="corrFolder" spellcheck="false" placeholder="/Volumes/BSK/_Musique">
         <button class="btn primary" id="corrScan">Analyser</button>
       </div>
-      <label class="check"><input type="checkbox" id="corrSub" checked> inclure les sous-dossiers</label>
-      <label class="check"><input type="checkbox" id="corrKeepGenre" checked> garder les genres déjà précis (plus rapide : Discogs n'est interrogé que pour les genres vides ou vagues)</label>
+      <div class="row" style="gap:6px 22px">
+        <label class="check"><input type="checkbox" id="corrSub" checked> inclure les sous-dossiers</label>
+        <label class="check"><input type="checkbox" id="corrKeepGenre" checked> garder les genres déjà précis</label>
+      </div>
+      <p class="note">Seuls les tags Genre et Commentaire changent : les fichiers gardent leur nom et leur place, Rekordbox les retrouve toujours.</p>
     </div>
-    <div class="panel stack" id="corrReview" hidden>
+    <div class="stack" id="corrReview" hidden>
       <div class="spread">
-        <div><h2 id="corrTitle"></h2><p class="lead" id="corrLead"></p></div>
-        <button class="btn small" id="corrRescan">Réanalyser</button>
+        <div><h2 id="corrTitle"></h2><p class="note" id="corrLead"></p></div>
+        <button class="btn" id="corrRescan">Réanalyser</button>
       </div>
       <div class="corr-progress" id="corrProgress" hidden>
         <div class="progress" role="progressbar" aria-label="Analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="corrBar"><i id="corrFill"></i></div>
         <div class="note" id="corrEta"></div>
       </div>
-      <div class="msg warn" id="corrRb" hidden></div>
-      <div class="tabs" id="corrTabs">
-        <button class="tab warn" data-f="todo">À corriger <span></span></button>
-        <button class="tab ok" data-f="ok">Déjà bons <span></span></button>
-        <button class="tab" data-f="all">Tous <span></span></button>
+      <div class="spread">
+        <div class="tabs" id="corrTabs" role="tablist" aria-label="Filtre">
+          <button class="tab" data-f="todo">À corriger <span></span></button>
+          <button class="tab" data-f="ok">Déjà bons <span></span></button>
+          <button class="tab" data-f="all">Tous <span></span></button>
+        </div>
+        <span class="note" id="corrRb" hidden style="color:var(--warn)"></span>
       </div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th></th><th>Fichier</th><th>Genre</th><th>Énergie</th></tr></thead>
+          <thead><tr><th style="width:28px"></th><th>Fichier</th><th style="width:230px">Genre</th><th style="width:110px">Énergie</th></tr></thead>
           <tbody id="corrRows"></tbody>
         </table>
       </div>
       <p class="note" id="corrEmpty" hidden></p>
+      <div class="stack" id="corrAfter" hidden></div>
     </div>
   </div>
-  <div class="nav" id="corrNav" hidden>
-    <span class="note">Les champs en vert sont les valeurs qui vont changer. Tu peux les modifier avant d'appliquer.</span>
-    <button class="btn primary" id="corrApply" disabled>Appliquer les modifications →</button>
-  </div>
-  <div class="stack" id="corrAfter" hidden></div>
+  <div class="nav" id="corrNav" hidden><div class="in">
+    <span class="info note">Les champs bleus sont les valeurs qui vont changer. Tu peux les modifier avant d'appliquer.</span>
+    <button class="btn primary" id="corrApply" disabled>Appliquer les modifications</button>
+  </div></div>
 </div>
 
 <!-- Settings -->
 <div class="overlay" id="settings" hidden>
-  <div class="panel stack" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <h2 id="settingsTitle">Réglages</h2>
     <div class="form-grid">
       <label for="setDownloads">Dossier Téléchargements</label>
@@ -415,7 +457,10 @@
     </div>
     <datalist id="musicDirs"></datalist>
     <p class="note" id="musicHint"></p>
-    <div class="row"><button class="btn primary" id="setSave">Enregistrer</button><button class="btn" id="setCancel">Fermer</button></div>
+    <div class="spread">
+      <button class="btn" id="quitBtn">Quitter compare2mix</button>
+      <div class="row"><button class="btn" id="setCancel">Fermer</button><button class="btn primary" id="setSave">Enregistrer</button></div>
+    </div>
   </div>
 </div>
 
@@ -510,6 +555,7 @@ function updateStepper() {
     const k = +b.dataset.go;
     b.classList.toggle("current", k === state.step);
     b.classList.toggle("done", k < state.step);
+    b.parentElement.classList.toggle("passed", k < state.step);
     b.disabled = k > max;
     if (k === state.step) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
   });
@@ -539,14 +585,27 @@ async function refreshStatus() {
   const pill = $("spotifyPill");
   pill.classList.toggle("on", sp.logged_in);
   pill.lastElementChild.textContent = sp.logged_in
-    ? `Spotify connecté${sp.user ? " · " + sp.user : ""}` : "Spotify non connecté";
+    ? `Spotify${sp.user ? " · " + sp.user : ""}` : "Spotify non connecté";
+  pill.title = sp.logged_in ? "Spotify connecté" : "Spotify non connecté";
+  renderKey();
   $("spLogin").hidden = sp.logged_in;
   $("cidRow").hidden = sp.client_id;
   $("loginLink").hidden = !sp.client_id;
   $("redirectUri").textContent = sp.redirect_uri;
   $("plSelect").hidden = !sp.logged_in;
+  $("plRows").hidden = !sp.logged_in;
   updateStepper();
   return s;
+}
+// USB key indicator (green: plugged in, red: not plugged in).
+function renderKey() {
+  const key = state.status && state.status.library && state.status.library.key;
+  const pill = $("keyPill");
+  pill.hidden = !key;
+  if (!key) return;
+  pill.classList.toggle("on", key.mounted);
+  pill.lastElementChild.textContent = `Clé ${key.name}`;
+  pill.title = key.mounted ? `Clé ${key.name} branchée` : `Clé ${key.name} non branchée`;
 }
 $("cidSave").addEventListener("click", (e) => busy(e.currentTarget, async () => {
   await api("/api/client-id", { client_id: $("clientId").value });
@@ -688,6 +747,7 @@ function render() {
     b.setAttribute("aria-pressed", on);
   });
   $("tabs").hidden = view !== "new";
+  $("filterText").hidden = view !== "new";
   $("listLead").hidden = view !== "new";
   if (view === "absent") return renderAbsent();
   $("listTitle").textContent = "Vus sur Spotify mais absents de Rekordbox";
@@ -704,9 +764,13 @@ function render() {
   const list = d.results
     .filter((r) => r.status === state.filter)
     .filter((r) => !state.text || (r.spotify.display + " " + (r.match ? r.match.display : "")).toLowerCase().includes(state.text));
-  $("results").replaceChildren(...(list.length ? list.map(card)
+  const head = state.filter === "missing" && list.length ? [tableHead()] : [];
+  $("results").replaceChildren(...head, ...(list.length ? list.map(card)
     : [el("div", { class: "empty" }, state.text ? "Aucun résultat pour ce filtre." : "Rien dans cette catégorie.")]));
 }
+
+const tableHead = () => el("div", { class: "thead" },
+  el("span", {}, "Titre"), el("span", {}, "Artiste"), el("span", { style: "text-align:right" }, "Durée"), el("span", {}));
 
 // Second list: tracks of the collection not on the key (click = copy "artist title").
 async function renderAbsent() {
@@ -726,7 +790,7 @@ async function renderAbsent() {
   const absentCard = (t) => {
     const k = keyOf(t);
     const c = el("div", { class: "card missing" + (copiedLinks.has(k) ? " copied" : "") });
-    c.append(el("div", { class: "line1" },
+    c.append(el("div", { class: "cols" },
       el("a", { href: "#", class: "sp", title: "Cliquer pour copier « artiste titre »",
         onclick: async (e) => {
           e.preventDefault();
@@ -735,14 +799,15 @@ async function renderAbsent() {
             toast("Copié : " + t.copy);
             copiedLinks.add(k); c.classList.add("copied"); refreshReset();
           } catch (err) { toast(err.message, true); }
-        } }, t.display),
-      el("span", { class: "muted" }, mmss(t.duration)),
+        } }, t.title),
+      el("span", { style: "overflow-wrap:anywhere" }, t.artists),
+      el("span", { class: "dur" }, mmss(t.duration)),
       el("span", { class: "copied-mark" }, "✓ copié · ",
         el("button", { class: "linkbtn", title: "Ne plus griser ce morceau",
           onclick: () => { copiedLinks.delete(k); c.classList.remove("copied"); refreshReset(); } }, "réactiver"))));
     return c;
   };
-  $("results").replaceChildren(...(list.length ? list.map(absentCard)
+  $("results").replaceChildren(...(list.length ? [tableHead(), ...list.map(absentCard)]
     : [el("div", { class: "empty" }, "Tous les morceaux de ta collection sont sur la clé.")]));
   refreshReset();
 }
@@ -775,6 +840,17 @@ function card(r) {
         },
       }, r.spotify.display)
     : el("span", { class: "sp" }, r.spotify.display);
+  if (r.status === "missing") { // one table row: title (click = copy link), artists, duration
+    spTitle.textContent = r.spotify.title;
+    c.append(el("div", { class: "cols" }, spTitle,
+      el("span", { style: "overflow-wrap:anywhere" }, r.spotify.artists),
+      el("span", { class: "dur" }, mmss(r.spotify.duration)),
+      el("span", { class: "copied-mark" }, "✓ lien copié · ",
+        el("button", { class: "linkbtn", title: "Ne plus griser ce morceau",
+          onclick: () => { copiedLinks.delete(r.key); c.classList.remove("copied"); updateResetCopied(); } },
+          "réactiver"))));
+    return c;
+  }
   c.append(el("div", { class: "line1" }, spTitle,
     el("span", { class: "muted" }, mmss(r.spotify.duration)),
     r.status === "missing" ? el("span", { class: "copied-mark" }, "✓ lien copié · ",
@@ -1016,7 +1092,8 @@ function renderRecap() {
       const cb = el("input", { type: "checkbox", id: "m" + i, "aria-label": "Inclure " + m.name });
       cb.checked = m.on;
       cb.addEventListener("change", () => { m.on = cb.checked; updateStart(); });
-      const main = el("tr", { class: m.durations ? "has-sub" : null },
+      const zebra = i % 2 ? " z" : "";
+      const main = el("tr", { class: (m.durations ? "has-sub" : "") + zebra },
         el("td", {}, cb),
         el("td", {}, el("div", { class: "sp-title" }, m.spotify_title),
           el("div", { class: "sp-artist" }, m.spotify_artists),
@@ -1027,11 +1104,11 @@ function renderRecap() {
         el("td", {}, genreInput(m)),
         el("td", {}, energyCell(m)),
         el("td", {}, el("span", { class: m.status === "found" ? "status found" : "status check" },
-          m.status === "found" ? "✅ sûr" : "à vérifier"),
+          m.status === "found" ? "sûr" : "à vérifier"),
           m.notes.length ? el("div", { class: "note" }, m.notes.join(" · ")) : null));
       if (!m.durations) return [main];
       // Both durations on a line of their own, so they are always aligned.
-      const sub = el("tr", { class: "sub" },
+      const sub = el("tr", { class: "sub" + zebra },
         el("td", {}),
         el("td", { class: "note alert" }, "durée " + m.durations.spotify),
         el("td", { class: "eq alert", "aria-hidden": "true" }, "≠"),
@@ -1051,10 +1128,10 @@ function renderRecap() {
   if (r.still_missing.length) parts.push(el("details", {},
     el("summary", {}, plural(r.still_missing.length, "morceau toujours manquant", "morceaux toujours manquants")),
     el("div", { class: "note" }, r.still_missing.join(" · "))));
-  parts.push(dest.available
-    ? el("div", { class: "dest" }, "Destination : ", el("code", {}, dest.music_dir),
-        keyName ? ` · clé ${keyName} branchée ✓` : "", ` · les fichiers seront ${verb}.`)
-    : el("div", { class: "msg warn" }, `⚠ La clé « ${keyName} » n'est pas branchée : branche-la, puis clique sur Revérifier. Destination : `, el("code", {}, dest.music_dir)));
+  // Destination in the bottom bar, next to the button that starts the copy.
+  $("recapDest").replaceChildren(...(dest.available
+    ? ["Destination : ", el("b", {}, dest.music_dir), ` · fichiers ${verb.split(" (")[0]}`]
+    : [el("span", { style: "color:var(--ko)" }, `La clé « ${keyName} » n'est pas branchée : branche-la, puis clique sur Revérifier.`)]));
   $("recapBody").replaceChildren(el("div", { class: "stack" }, parts));
   updateStart();
 }
@@ -1063,7 +1140,7 @@ function updateStart() {
   const k = r && r.matches ? r.matches.filter((m) => m.on).length : 0;
   // Wait until every genre and energy has been determined.
   const pending = r && r.matches ? r.matches.some((m) => !m.genreLoaded || !m.energyLoaded) : false;
-  $("startCopy").textContent = pending ? "Analyse en cours…" : `Lancer la copie (${plural(k, "fichier", "fichiers")}) →`;
+  $("startCopy").textContent = pending ? "Analyse en cours…" : `Lancer la copie (${plural(k, "fichier", "fichiers")})`;
   $("startCopy").disabled = pending || !k || !r.destination.available;
 }
 
@@ -1077,6 +1154,8 @@ async function runTransfer() {
   go(5);
   $("back5").disabled = true;
   $("doneCard").hidden = true;
+  $("restart").hidden = true;
+  $("reveal").hidden = true;
   $("copyTitle").textContent = "Copie en cours…";
   $("copyLead").textContent = "Ne débranche pas la clé.";
   const steps = sel.map((m) => `Copie de ${m.new_name || m.name}`);
@@ -1117,17 +1196,20 @@ async function runTransfer() {
     let archived = null;
     try { archived = (await api("/api/transfer-done", {})).export_archived; } catch (e) { /* not essential */ }
     $("doneText").replaceChildren(
-      el("div", {}, "Dans Rekordbox, glisse-les depuis le Finder (", el("code", {}, dest), ") sur ta playlist."),
+      el("div", {}, "Dans Rekordbox, glisse les nouveaux fichiers depuis le Finder (", el("b", {}, dest), ") sur ta playlist."),
       ...(archived ? [el("div", { class: "note" }, `Ton export Rekordbox a été renommé « ${archived} » dans Téléchargements : il ne sera plus relu.`)] : []));
     $("doneCard").hidden = false;
+    $("reveal").hidden = false;
   }
   state.transfer.done = true;
+  $("restart").hidden = false;
   $("back5").disabled = false;
   // The comparison changed: transferred tracks are now found.
   state.recap = null;
   compare(false).then(() => updateStepper());
 }
 $("restart").addEventListener("click", () => { state.recap = null; state.transfer = null; go(1); });
+$("reveal").addEventListener("click", () => api("/api/reveal", {}).catch((e) => toast(e.message, true)));
 
 // ---------- settings ---------------------------------------------------------
 async function openSettings() {
@@ -1215,8 +1297,7 @@ async function corrScan() {
     energy: energyFromComment(f.comment) }));
   const inRb = corr.files.filter((f) => f.in_rekordbox).length;
   $("corrRb").hidden = !inRb;
-  $("corrRb").textContent = `${plural(inRb, "fichier est", "fichiers sont")} dans ta bibliothèque Rekordbox. `
-    + "Rekordbox ne relit pas tout seul les tags d'un morceau déjà importé : après la correction, recharge les tags de ces morceaux pour voir le nouveau genre et l'énergie.";
+  $("corrRb").textContent = `${plural(inRb, "fichier est", "fichiers sont")} dans Rekordbox : recharge leurs tags après la correction.`;
   corr.filter = "todo";
   corr.started = Date.now();
   $("corrRows").replaceChildren(...corr.files.map(corrRow));
@@ -1283,7 +1364,7 @@ function corrRefresh() {
     const n = { todo: 0, ok: 0, pending: 0 };
     for (const f of corr.files) n[corrState(f)]++;
     const total = corr.files.length;
-    $("corrTitle").textContent = plural(total, "fichier", "fichiers") + (n.pending ? " en cours d'analyse" : " analysés");
+    $("corrTitle").textContent = plural(total, "fichier", "fichiers") + (n.pending ? " en cours d'analyse" : total > 1 ? " analysés" : " analysé");
     $("corrLead").textContent = n.pending
       ? `Analyse : ${total - n.pending} / ${total} · ${n.todo} à corriger · ${n.ok} déjà bons`
       : `${n.todo} à corriger · ${n.ok} déjà bons`;
@@ -1314,7 +1395,7 @@ function corrRefresh() {
       ? (n.pending ? "Les fichiers à corriger apparaissent ici au fil de l'analyse." : "Rien à corriger dans ce dossier.")
       : "Aucun fichier dans cette catégorie.";
     const k = corr.files.filter((f) => f.on && corrState(f) === "todo").length;
-    $("corrApply").textContent = `Appliquer les modifications (${plural(k, "fichier", "fichiers")}) →`;
+    $("corrApply").textContent = `Appliquer les modifications (${plural(k, "fichier", "fichiers")})`;
     $("corrApply").disabled = !k;
   });
 }

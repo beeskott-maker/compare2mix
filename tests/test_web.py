@@ -93,7 +93,7 @@ def call(base, path, body=None, headers=None):
 
 def test_page_served(server):
     base, _ = server
-    assert "compare<span>2</span>mix" in call(base, "/")
+    assert '<div class="brand">' in call(base, "/")
 
 
 def test_full_flow(server):
