@@ -275,6 +275,7 @@
         <div class="fact"><b id="factTracks">–</b><span>tracks dans Rekordbox</span></div>
         <span class="facts-arrow" aria-hidden="true">→</span>
         <button class="fact pick on" data-view="new" aria-pressed="true"><b id="factMissing">–</b><span>nouveaux titres à télécharger</span></button>
+        <span class="facts-arrow" aria-hidden="true" id="factPlus">+</span>
         <button class="fact pick" data-view="absent" aria-pressed="false" id="factKeyBox"><b id="factKey">–</b><span id="factKeyLbl">tracks absents de la clé</span></button>
       </div>
     </div>
@@ -558,6 +559,7 @@ function renderLibrary() {
   state.absent = null; // library (re)loaded: the list of tracks absent from the key changes
   if (!lib.key && state.view === "absent") state.view = "new";
   $("factKeyBox").hidden = !lib.key;
+  $("factPlus").hidden = !lib.key;
   if (lib.key) {
     $("factKey").textContent = lib.key.absent;
     $("factKeyLbl").textContent = `tracks absents de la clé ${lib.key.name}`
