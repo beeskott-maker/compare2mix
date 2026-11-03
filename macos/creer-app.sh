@@ -27,8 +27,21 @@ if [ -f "$ICON" ]; then
   done
   iconutil -c icns "$SET" -o "$APP/Contents/Resources/applet.icns"
   rm -rf "$(dirname "$SET")"
-  touch "$APP"  # le Finder et le Dock rafraîchissent l'icône
+  # Les versions récentes de macOS prennent l'icône dans Assets.car (désigné par
+  # CFBundleIconName) avant applet.icns : on retire l'un et l'autre.
+  rm -f "$APP/Contents/Resources/Assets.car"
+  PLIST="$APP/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile applet" "$PLIST" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string applet" "$PLIST"
+  # Le contenu a changé : nouvelle signature locale, sinon macOS peut refuser de l'ouvrir.
+  codesign --force --deep --sign - "$APP" 2>/dev/null || true
+  # Oublier l'ancienne icône en cache.
+  touch "$APP"
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP" 2>/dev/null || true
+  echo "Icône installée."
 fi
 
 echo "Application créée : $APP"
+echo "Si le Dock montre encore l'ancienne icône : retire-la du Dock puis remets-la (ou « killall Dock »)."
 echo "Tu la trouves dans Spotlight (Cmd+Espace, « compare2mix ») ; glisse-la dans le Dock si tu veux."
