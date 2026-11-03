@@ -483,3 +483,39 @@ def test_audio_endpoint_serves_downloads_only_with_ranges(env):
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(url + "/api/audio?source=" + urllib.parse.quote(str(FIX / "rekordbox_sample.xml")))
     assert e.value.code == 404
+
+
+# ---- Correction mode ------------------------------------------------------------
+
+def test_correction_scan_and_apply(env, tmp_path):
+    tmp, app, call = env
+    lib = tmp / "Lib"
+    f = make_wav(lib / "Deep" / "Nobody - Song.wav", title="Song", artist="Nobody", seconds=2)
+    make_wav(lib / ".hidden.wav")
+    (lib / "notes.txt").write_text("x")
+    other = make_wav(tmp / "Elsewhere" / "x.wav")
+
+    data = call("/api/correction/scan", {"folder": str(lib), "recursive": True})
+    assert [(x["name"], x["folder"], x["genre"], x["artists"]) for x in data["files"]] == \
+        [("Nobody - Song.wav", "Deep", None, "Nobody")]
+    assert call("/api/correction/scan", {"folder": str(lib), "recursive": False})["files"] == []
+    data = call("/api/correction/scan", {"folder": str(lib)})
+
+    app._discogs_factory = lambda token: type("D", (), {
+        "genre_for": staticmethod(lambda t: {"genre": "Deep House " + t.title})})()
+    q = "?path=" + urllib.parse.quote(str(f))
+    assert call("/api/correction/genre" + q)["genre"] == "Deep House Song"
+
+    res = call("/api/correction/apply", {"path": str(f), "genre": "Deep House", "comment": "E6 · sombre"})
+    assert (res["genre"], res["comment"]) == ("Deep House", "E6 · sombre")
+    assert f.exists() and f.name == "Nobody - Song.wav"  # never renamed nor moved
+    assert importer.read_audio_track(f).title == "Song"
+    # Outside the analysed folder: refused.
+    with pytest.raises(urllib.error.HTTPError) as e:
+        call("/api/correction/apply", {"path": str(other), "genre": "X"})
+    assert e.value.code == 404
+    # The player can read files of the analysed folder.
+    url = next(c.cell_contents for c in call.__closure__ if isinstance(c.cell_contents, str))
+    with urllib.request.urlopen(url + "/api/audio?source=" + urllib.parse.quote(str(f))) as r:
+        assert r.status == 200
+    assert call("/api/correction")["folder"] == str(lib)

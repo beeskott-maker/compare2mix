@@ -197,13 +197,31 @@
     .form-grid { grid-template-columns: 1fr; }
     .tabs input { flex-basis: 100%; margin-left: 0; }
   }
+  .modes { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; }
+  .modes button { font: inherit; font-size: 14px; font-weight: 600; border: 0; background: none; color: var(--muted); padding: 3px 14px; border-radius: 999px; cursor: pointer; }
+  .modes button.on { background: var(--panel); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  body.mode-correction #importView { display: none; }
+  .folder { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .folder input { flex: 1 1 280px; }
+  .was { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .was s { text-decoration-color: var(--muted); }
+  input.changed { border-color: var(--accent); background: var(--accent-soft); }
+  .chip.rb { background: var(--warn-bg); color: var(--warn); }
+  .subfolder { font-size: 12px; color: var(--muted); margin-left: 32px; }
+  .confirm { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: var(--panel); }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="spread">
-    <h1>compare<span>2</span>mix</h1>
+    <div class="row" style="gap:16px">
+      <h1>compare<span>2</span>mix</h1>
+      <div class="modes" role="tablist" aria-label="Mode">
+        <button role="tab" id="modeImport" class="on" aria-selected="true">Import</button>
+        <button role="tab" id="modeCorrection" aria-selected="false">Correction</button>
+      </div>
+    </div>
     <div class="row">
       <button class="linkbtn" id="settingsBtn">Réglages</button>
       <button class="linkbtn" id="quitBtn">Quitter</button>
@@ -211,6 +229,7 @@
     </div>
   </header>
 
+  <div id="importView">
   <ol class="stepper" id="stepper">
     <li><button data-go="1"><div class="bar"></div><div class="lbl"><span class="n">1</span><span class="name">Playlist</span></div></button></li>
     <li><button data-go="2"><div class="bar"></div><div class="lbl"><span class="n">2</span><span class="name">Exporter</span></div></button></li>
@@ -330,6 +349,48 @@
     </div>
     <div class="nav"><button class="btn" data-go="4" id="back5">← Retour</button><span></span></div>
   </section>
+  </div>
+</div>
+
+<!-- Correction: genre and energy of the files of a folder (names never change) -->
+<div class="wrap" id="correctionView" hidden>
+  <div class="stack">
+    <div class="panel stack">
+      <div>
+        <h2>Correction de fichiers</h2>
+        <p class="lead">Analyse les fichiers audio d'un dossier et propose le genre et l'énergie. Les fichiers gardent leur nom et leur place : Rekordbox les retrouve toujours. Rien n'est modifié avant que tu valides.</p>
+      </div>
+      <div class="folder">
+        <input type="text" id="corrFolder" spellcheck="false" aria-label="Dossier à analyser" placeholder="/Volumes/BSK/_Musique">
+        <button class="btn primary" id="corrScan">Analyser</button>
+      </div>
+      <label class="check"><input type="checkbox" id="corrSub" checked> inclure les sous-dossiers</label>
+    </div>
+    <div class="panel stack" id="corrReview" hidden>
+      <div class="spread">
+        <div><h2 id="corrTitle"></h2><p class="lead" id="corrLead"></p></div>
+        <button class="btn small" id="corrRescan">Réanalyser</button>
+      </div>
+      <div class="msg warn" id="corrRb" hidden></div>
+      <div class="tabs" id="corrTabs">
+        <button class="tab warn" data-f="todo">À corriger <span></span></button>
+        <button class="tab ok" data-f="ok">Déjà bons <span></span></button>
+        <button class="tab" data-f="all">Tous <span></span></button>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th></th><th>Fichier</th><th>Genre</th><th>Énergie</th></tr></thead>
+          <tbody id="corrRows"></tbody>
+        </table>
+      </div>
+      <p class="note" id="corrEmpty" hidden></p>
+    </div>
+  </div>
+  <div class="nav" id="corrNav" hidden>
+    <span class="note">Les champs en vert sont les valeurs qui vont changer. Tu peux les modifier avant d'appliquer.</span>
+    <button class="btn primary" id="corrApply" disabled>Appliquer les modifications →</button>
+  </div>
+  <div class="stack" id="corrAfter" hidden></div>
 </div>
 
 <!-- Settings -->
@@ -1099,6 +1160,216 @@ $("setSave").addEventListener("click", (e) => busy(e.currentTarget, async () => 
   if (state.step === 3 && state.status.library.count) renderLibrary();
   if (state.step === 4) loadRecap();
 }));
+
+// ---------- Correction mode --------------------------------------------------
+// Genre (Discogs) and energy (local analysis) of every audio file of a folder.
+// Only the Genre and Comment tags change: files keep their name and place.
+const corr = { files: [], filter: "todo", run: 0 };
+function setMode(mode) {
+  const c = mode === "correction";
+  document.body.classList.toggle("mode-correction", c);
+  $("correctionView").hidden = !c;
+  $("modeImport").classList.toggle("on", !c); $("modeImport").setAttribute("aria-selected", !c);
+  $("modeCorrection").classList.toggle("on", c); $("modeCorrection").setAttribute("aria-selected", c);
+  stopPlayer();
+  if (c && !$("corrFolder").value) {
+    api("/api/correction").then((st) => {
+      if (!$("corrFolder").value) $("corrFolder").value = st.folder;
+      $("corrSub").checked = !!st.recursive;
+    }).catch(() => {});
+  }
+}
+$("modeImport").addEventListener("click", () => setMode("import"));
+$("modeCorrection").addEventListener("click", () => setMode("correction"));
+
+const energyFromComment = (c) => { const m = /^E(\d{1,2})\b/.exec(c || ""); return m ? parseInt(m[1], 10) : null; };
+const corrComment = (f) => [f.energy ? "E" + f.energy : "", f.mood || ""].filter(Boolean).join(" · ");
+function corrState(f) {
+  if (f.applied) return "ok";
+  if (!f.genreLoaded || !f.energyLoaded) return "pending";
+  const g = (f.newGenre || "").trim(), c = corrComment(f);
+  const changes = (g && g !== (f.genre || "")) || (c && c !== (f.comment || ""));
+  return changes ? "todo" : "ok";
+}
+
+async function corrScan() {
+  const folder = $("corrFolder").value.trim();
+  if (!folder) { toast("Indique un dossier.", true); return; }
+  stopPlayer();
+  const run = ++corr.run;
+  $("corrReview").hidden = false; $("corrNav").hidden = true; $("corrAfter").hidden = true;
+  $("corrTitle").textContent = "Lecture du dossier…";
+  $("corrLead").textContent = ""; $("corrRows").replaceChildren(); $("corrRb").hidden = true;
+  let data;
+  try { data = await api("/api/correction/scan", { folder, recursive: $("corrSub").checked }); }
+  catch (e) { $("corrTitle").textContent = e.message; return; }
+  if (run !== corr.run) return;
+  corr.files = data.files.map((f) => Object.assign(f, { source: f.path, on: true,
+    newGenre: undefined, genreLoaded: false, energyLoaded: false,
+    energy: energyFromComment(f.comment) }));
+  const inRb = corr.files.filter((f) => f.in_rekordbox).length;
+  $("corrRb").hidden = !inRb;
+  $("corrRb").textContent = `${plural(inRb, "fichier est", "fichiers sont")} dans ta bibliothèque Rekordbox. `
+    + "Rekordbox ne relit pas tout seul les tags d'un morceau déjà importé : après la correction, recharge les tags de ces morceaux pour voir le nouveau genre et l'énergie.";
+  corr.filter = "todo";
+  $("corrRows").replaceChildren(...corr.files.map(corrRow));
+  $("corrNav").hidden = !corr.files.length;
+  corrRefresh();
+  // Two analyses side by side: Discogs (network) and energy (this computer).
+  corrGenres(run); corrEnergies(run);
+}
+$("corrScan").addEventListener("click", (e) => busy(e.currentTarget, corrScan));
+$("corrRescan").addEventListener("click", (e) => busy(e.currentTarget, corrScan));
+$("corrFolder").addEventListener("keydown", (e) => { if (e.key === "Enter") corrScan(); });
+
+function corrRow(f) {
+  const cb = el("input", { type: "checkbox", "aria-label": "Corriger " + f.name });
+  cb.checked = f.on;
+  cb.addEventListener("change", () => { f.on = cb.checked; corrRefresh(); });
+  const g = el("input", { type: "text", class: "genre", spellcheck: "false", "aria-label": "Genre de " + f.name });
+  g.addEventListener("input", () => { f.newGenre = g.value; f.genreEdited = true; corrUpdate(f); });
+  const e = el("input", { type: "number", min: "1", max: "10", step: "1", class: "energy", "aria-label": "Énergie de " + f.name });
+  e.addEventListener("input", () => { f.energy = parseInt(e.value, 10) || null; f.energyEdited = true; corrUpdate(f); });
+  f.ui = {
+    cb, g, e, mood: el("div", { class: "note" }),
+    gWas: el("div", { class: "was" }), eWas: el("div", { class: "was" }),
+    gField: loadingField(g, true, true), eField: loadingField(e, true),
+  };
+  const chips = audioChips(f.audio);
+  if (f.in_rekordbox && chips) chips.append(el("span", { class: "chip rb" }, "dans Rekordbox"));
+  f.ui.tr = el("tr", {},
+    el("td", {}, cb),
+    el("td", { class: "file" }, el("div", { class: "fname" }, playButton(f), el("span", {}, f.name)),
+      f.folder ? el("div", { class: "subfolder" }, f.folder) : null, chips),
+    el("td", {}, f.ui.gWas, f.ui.gField),
+    el("td", {}, f.ui.eWas, f.ui.eField, f.ui.mood));
+  corrUpdate(f);
+  return f.ui.tr;
+}
+
+function corrUpdate(f) {
+  const u = f.ui; if (!u) return;
+  const was = (node, cur, next) => {
+    node.replaceChildren("actuel : ", cur ? (next && next !== cur ? el("s", {}, cur) : cur) : "vide");
+  };
+  was(u.gWas, f.genre, (f.newGenre || "").trim());
+  was(u.eWas, f.comment, corrComment(f));
+  if (!f.genreEdited && f.newGenre !== undefined) u.g.value = f.newGenre || "";
+  if (!f.energyEdited) u.e.value = f.energy || "";
+  u.g.classList.toggle("changed", !!(u.g.value.trim() && u.g.value.trim() !== (f.genre || "")));
+  u.e.classList.toggle("changed", !!(corrComment(f) && corrComment(f) !== (f.comment || "")));
+  u.gField.classList.toggle("loading", !f.genreLoaded);
+  u.eField.classList.toggle("loading", !f.energyLoaded);
+  u.mood.textContent = f.mood || f.energyNote || "";
+  const st = corrState(f);
+  u.tr.hidden = !(corr.filter === "all" || corr.filter === st);
+  u.cb.disabled = st !== "todo";
+  corrRefresh();
+}
+
+let corrRefreshPending = false;
+function corrRefresh() {
+  if (corrRefreshPending) return;
+  corrRefreshPending = true;
+  requestAnimationFrame(() => {
+    corrRefreshPending = false;
+    const n = { todo: 0, ok: 0, pending: 0 };
+    for (const f of corr.files) n[corrState(f)]++;
+    const total = corr.files.length;
+    $("corrTitle").textContent = plural(total, "fichier", "fichiers") + (n.pending ? " en cours d'analyse" : " analysés");
+    $("corrLead").textContent = n.pending
+      ? `Analyse : ${total - n.pending} / ${total} · ${n.todo} à corriger · ${n.ok} déjà bons`
+      : `${n.todo} à corriger · ${n.ok} déjà bons`;
+    document.querySelectorAll("#corrTabs .tab").forEach((t) => {
+      const k = t.dataset.f;
+      t.querySelector("span").textContent = k === "all" ? total : n[k];
+      t.classList.toggle("active", k === corr.filter);
+    });
+    for (const f of corr.files) if (f.ui) f.ui.tr.hidden = !(corr.filter === "all" || corr.filter === corrState(f));
+    const shown = corr.files.filter((f) => !f.ui.tr.hidden).length;
+    $("corrEmpty").hidden = !!shown || !total;
+    $("corrEmpty").textContent = corr.filter === "todo"
+      ? (n.pending ? "Les fichiers à corriger apparaissent ici au fil de l'analyse." : "Rien à corriger dans ce dossier.")
+      : "Aucun fichier dans cette catégorie.";
+    const k = corr.files.filter((f) => f.on && corrState(f) === "todo").length;
+    $("corrApply").textContent = `Appliquer les modifications (${plural(k, "fichier", "fichiers")}) →`;
+    $("corrApply").disabled = !k;
+  });
+}
+document.querySelectorAll("#corrTabs .tab").forEach((t) => t.addEventListener("click", () => { corr.filter = t.dataset.f; corrRefresh(); }));
+
+async function corrGenres(run) {
+  for (const f of corr.files) {
+    if (run !== corr.run) return;
+    let g = null;
+    try { g = (await api("/api/correction/genre?path=" + encodeURIComponent(f.path))).genre; }
+    catch (e) { f.genreError = e.message; }
+    f.genreLoaded = true;
+    if (!f.genreEdited) f.newGenre = g || f.genre || "";
+    corrUpdate(f);
+  }
+}
+async function corrEnergies(run) {
+  let unavailable = null;
+  for (const f of corr.files) {
+    if (run !== corr.run) return;
+    if (f.energy || unavailable) { // already rated ("E7 …" in the comment), or no Essentia
+      f.energyLoaded = true;
+      if (f.energy) f.mood = (f.comment || "").split(" · ")[1] || null;
+      else f.energyNote = "non analysé";
+      corrUpdate(f); continue;
+    }
+    try {
+      const info = await api("/api/correction/energy?path=" + encodeURIComponent(f.path));
+      if (!f.energyEdited) f.energy = info.energy;
+      f.mood = info.mood;
+    } catch (e) {
+      f.energyNote = "non analysé";
+      if (/Essentia/.test(e.message)) unavailable = e.message;
+    }
+    f.energyLoaded = true;
+    corrUpdate(f);
+  }
+}
+
+// Apply: a confirmation inside the page, then a progress bar.
+$("corrApply").addEventListener("click", () => {
+  const sel = corr.files.filter((f) => f.on && corrState(f) === "todo");
+  if (!sel.length) return;
+  const after = $("corrAfter"); after.hidden = false;
+  const go = el("button", { class: "btn primary" }, "Oui, appliquer");
+  const no = el("button", { class: "btn" }, "Annuler");
+  no.addEventListener("click", () => { after.hidden = true; });
+  go.addEventListener("click", () => corrApply(sel));
+  after.replaceChildren(el("div", { class: "confirm" },
+    el("span", {}, `Les tags Genre et Commentaire de ${plural(sel.length, "fichier", "fichiers")} seront remplacés. Continuer ?`), go, no));
+  after.scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+async function corrApply(sel) {
+  stopPlayer();
+  $("corrApply").disabled = true;
+  const fill = el("i"), lead = el("p", { class: "lead" }, "");
+  const title = el("h2", {}, "Correction en cours…");
+  const errors = el("ul", { class: "notes" });
+  $("corrAfter").replaceChildren(el("div", { class: "panel stack" }, title,
+    el("div", { class: "progress", role: "progressbar" }, fill), lead, errors));
+  let ok = 0;
+  for (let i = 0; i < sel.length; i++) {
+    const f = sel[i];
+    try {
+      const r = await api("/api/correction/apply", { path: f.path, genre: (f.newGenre || "").trim(), comment: corrComment(f) });
+      f.genre = r.genre; f.comment = r.comment; f.applied = true; ok++;
+    } catch (e) { errors.append(el("li", {}, `${f.name} : ${e.message}`)); }
+    fill.style.width = Math.round(((i + 1) / sel.length) * 100) + "%";
+    lead.textContent = `${i + 1} / ${sel.length} fichiers`;
+    corrUpdate(f);
+  }
+  title.textContent = `Terminé : ${plural(ok, "fichier corrigé", "fichiers corrigés")}`
+    + (ok < sel.length ? ` · ${sel.length - ok} en erreur` : "");
+  lead.textContent = corr.files.some((x) => x.applied && x.in_rekordbox)
+    ? "Dans Rekordbox, recharge les tags des morceaux concernés pour voir le nouveau genre et l'énergie." : "";
+  corrRefresh();
+}
 
 // ---------- start ----------------------------------------------------------
 (async () => {

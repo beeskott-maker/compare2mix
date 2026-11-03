@@ -106,6 +106,7 @@ class App:
         self._discogs_token: str | None = None
         self.analyzer = analyzer or energy.Analyzer()
         self.on_quit: Callable[[], None] | None = None  # set by serve()
+        self.correction_root: Path | None = None  # folder analysed in "Correction"
         self.lock = threading.RLock()
         self.scan_lock = threading.Lock()
         self.library_lock = threading.Lock()
@@ -619,6 +620,86 @@ class App:
             raise ApiError("Fichier introuvable dans Téléchargements.", 404)
         return path
 
+    def playable_file(self, source: str) -> Path:
+        """A file the page may play: in Downloads, or in the folder being corrected."""
+        try:
+            return self.downloads_file(source)
+        except ApiError:
+            return self._correction_file(source)
+
+    # ---- Correction: genre and energy of the files of any folder --------------
+    def correction_scan(self, folder: str, recursive: bool = True) -> dict:
+        folder_path = Path(os.path.expanduser((folder or "").strip()))
+        if not folder or not folder_path.is_dir():
+            raise ApiError(f"Dossier introuvable : {folder}", 404)
+        if not importer.is_available(folder_path):
+            raise ApiError(f"La clé « {os.path.basename(importer.volume_root(folder_path) or '')} » "
+                           "n'est pas branchée.", 409, "volume")
+        self.correction_root = folder_path.resolve()
+        config.update(self.config_path, correction_dir=str(folder_path),
+                      correction_recursive=bool(recursive))
+        in_rb = self._collection_locations()
+        files = []
+        paths = importer.scan_audio(folder_path, recursive)
+        for path in paths:
+            track = self._read_file(path)
+            genre, comment = importer.read_genre_comment(path)
+            rel = os.path.relpath(path.parent, folder_path)
+            files.append({
+                "path": str(path), "name": path.name, "folder": "" if rel == "." else rel,
+                "title": track.title, "artists": track.artist_str,
+                "audio": importer.audio_info(path),
+                "genre": genre, "comment": comment,
+                "in_rekordbox": str(path) in in_rb,
+            })
+        return {"folder": str(folder_path), "recursive": bool(recursive), "files": files,
+                "truncated": len(paths) >= 5000}
+
+    def correction_settings(self) -> dict:
+        s = self.settings
+        return {"folder": s.get("correction_dir") or self.import_settings()["music_dir"],
+                "recursive": s.get("correction_recursive", True)}
+
+    def _correction_file(self, source: str) -> Path:
+        path = Path(source)
+        root = self.correction_root
+        if root is None or not path.is_file() or root not in path.resolve().parents:
+            raise ApiError("Fichier introuvable dans le dossier analysé.", 404)
+        return path
+
+    def correction_genre(self, source: str) -> dict:
+        track = self._read_file(self._correction_file(source))
+        try:
+            return self._discogs_client().genre_for(track)
+        except discogs.DiscogsError as e:
+            raise ApiError(str(e), 502, "discogs") from e
+
+    def correction_energy(self, source: str) -> dict:
+        path = self._correction_file(source)
+        if not energy.available():
+            raise ApiError("Analyse d'énergie indisponible : installe Essentia "
+                           "(pip install essentia-tensorflow).", 501, "no_essentia")
+        try:
+            return self.analyzer.analyze(path)
+        except energy.EnergyUnavailable as e:
+            raise ApiError(str(e), 502, "energy") from e
+        except Exception as e:
+            raise ApiError(f"Analyse impossible : {e}", 500, "energy") from e
+
+    def correction_apply(self, source: str, genre: str | None, comment: str | None) -> dict:
+        """Write the Genre and Comment tags; the file keeps its name and place."""
+        path = self._correction_file(source)
+        genre = (genre or "").strip() or None
+        comment = (comment or "").strip() or None
+        if genre or comment:
+            try:
+                importer.write_tags(path, genre=genre, comment=comment)
+            except Exception as e:
+                raise ApiError(f"Tags non écrits : {e}", 500) from e
+        self._file_cache.clear()
+        g, c = importer.read_genre_comment(path)
+        return {"path": str(path), "genre": g, "comment": c}
+
     def energy(self, source: str) -> dict:
         """Step 4: energy (1-10) and mood of a file in Downloads (local analysis)."""
         path = self.downloads_file(source)
@@ -835,7 +916,13 @@ def make_handler(app: App):
             if path == "/api/key-absent":
                 return self._run(lambda: self._json(app.key_absent()))
             if path == "/api/audio":
-                return self._run(lambda: self._send_audio(app.downloads_file(q.get("source", ""))))
+                return self._run(lambda: self._send_audio(app.playable_file(q.get("source", ""))))
+            if path == "/api/correction":
+                return self._run(lambda: self._json(app.correction_settings()))
+            if path == "/api/correction/genre":
+                return self._run(lambda: self._json(app.correction_genre(q.get("path", ""))))
+            if path == "/api/correction/energy":
+                return self._run(lambda: self._json(app.correction_energy(q.get("path", ""))))
             if path == "/api/energy":
                 return self._run(lambda: self._json(app.energy(q.get("source", ""))))
             if path == "/api/genre":
@@ -872,6 +959,12 @@ def make_handler(app: App):
                                                        bool(body.get("read_tags"))))
                 if path == "/api/library/from-downloads":
                     return self._json(app.library_from_downloads())
+                if path == "/api/correction/scan":
+                    return self._json(app.correction_scan(body.get("folder", ""),
+                                                          bool(body.get("recursive", True))))
+                if path == "/api/correction/apply":
+                    return self._json(app.correction_apply(body.get("path", ""), body.get("genre"),
+                                                           body.get("comment")))
                 if path == "/api/transfer-done":
                     return self._json(app.transfer_done())
                 if path == "/api/import":

@@ -262,6 +262,59 @@ def audio_info(path: str | os.PathLike) -> dict:
     return info
 
 
+def read_genre_comment(path: str | os.PathLike) -> tuple[str | None, str | None]:
+    """Current Genre and Comment tags of a file (None when absent)."""
+    try:
+        import mutagen  # type: ignore
+        from mutagen.id3 import ID3  # type: ignore
+        from mutagen.mp4 import MP4Tags  # type: ignore
+
+        tags = (mutagen.File(path) or {}).tags
+    except Exception:
+        return None, None
+    if not tags:
+        return None, None
+
+    def first(v):
+        if hasattr(v, "text"):
+            v = v.text
+        if isinstance(v, (list, tuple)):
+            v = v[0] if v else None
+        v = str(v).strip() if v is not None else ""
+        return v or None
+
+    if isinstance(tags, ID3):
+        genre = first(tags.get("TCON"))
+        comms = [c for c in tags.getall("COMM") if not c.desc] or tags.getall("COMM")
+        return genre, first(comms[0]) if comms else None
+    if isinstance(tags, MP4Tags):
+        return first(tags.get("\xa9gen")), first(tags.get("\xa9cmt"))
+    try:
+        return first(tags.get("genre")), first(tags.get("comment") or tags.get("description"))
+    except Exception:
+        return None, None
+
+
+def scan_audio(folder: str | os.PathLike, recursive: bool = True, limit: int = 5000) -> list[Path]:
+    """Audio files of a folder (and its sub-folders), hidden ones skipped."""
+    folder = Path(folder).expanduser()
+    if not folder.is_dir():
+        return []
+    out: list[Path] = []
+    walker = os.walk(folder) if recursive else [(str(folder), [], os.listdir(folder))]
+    for root, dirs, names in walker:
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        for name in sorted(names):
+            if name.startswith(".") or Path(name).suffix.lower() not in AUDIO_EXTENSIONS:
+                continue
+            p = Path(root) / name
+            if p.is_file():
+                out.append(p)
+                if len(out) >= limit:
+                    return out
+    return out
+
+
 def write_tags(path: str | os.PathLike, genre: str | None = None,
                title: str | None = None, artists: list[str] | None = None,
                comment: str | None = None) -> None:

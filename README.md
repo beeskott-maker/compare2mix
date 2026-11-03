@@ -122,6 +122,16 @@ compare2mix n'écrit jamais dans Rekordbox : il range les fichiers, tu les ajout
 clé n'est pas branchée, rien n'est écrit (pas de faux dossier sur le disque du Mac) : branche-la
 puis « Revérifier ».
 
+## Mode Correction
+
+En haut de la page, **Import / Correction**. La correction analyse tous les fichiers audio d'un
+dossier (par défaut celui de la clé, sous-dossiers compris) et propose, pour chacun, le **genre**
+(Discogs) et l'**énergie** (analyse locale). Les valeurs actuelles sont affichées au-dessus des
+propositions, modifiables ; les fichiers à corriger sont listés au fil de l'analyse. « Appliquer les
+modifications » écrit seulement les tags Genre et Commentaire : **les fichiers ne sont jamais renommés
+ni déplacés**, Rekordbox les retrouve toujours. Pour un morceau déjà importé, recharge ses tags dans
+Rekordbox. Un fichier dont le commentaire contient déjà une énergie (« E7 … ») n'est pas réanalysé.
+
 ## Analyse d'énergie (facultative)
 
 ```bash
@@ -174,6 +184,7 @@ Structure : `compare2mix/rekordbox.py` (lecture XML / master.db), `spotify.py` (
 - [x] Récupération des fichiers téléchargés, renommés et rangés sur la clé
 - [x] Genre détaillé depuis Discogs, écrit dans les tags
 - [x] Niveau d'énergie et humeur (analyse audio locale avec Essentia)
+- [x] Mode Correction : genre et énergie des fichiers d'un dossier
 - [ ] Comparer toutes les playlists d'un coup (liste d'achats unique)
 - [ ] Playlist Spotify « À acheter »
 - [ ] Comparaison avec une playlist Rekordbox précise plutôt que toute la collection
