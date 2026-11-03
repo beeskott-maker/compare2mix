@@ -97,8 +97,6 @@
   button.fact { font: inherit; color: inherit; text-align: left; background: transparent; border: 2px solid var(--line); cursor: pointer; transition: border-color .15s, background-color .15s; }
   button.fact:hover { border-color: var(--accent); background: var(--bg); }
   button.fact.on { border-color: var(--accent); background: var(--accent-soft); }
-  button.fact span::after { content: " →"; opacity: 0; }
-  button.fact:hover span::after, button.fact.on span::after { opacity: 1; }
   .tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .tab { border: 0; border-radius: 999px; padding: 4px 12px; font: 600 14px var(--font-ui); background: var(--chip); color: var(--muted); cursor: pointer; }
   .tab.ko { background: var(--ko-bg); color: var(--ko); }
