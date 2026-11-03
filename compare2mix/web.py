@@ -514,6 +514,8 @@ class App:
                                                  Path(p.file.location).suffix.lower()),
                 "spotify_key": p.spotify.key,
                 "spotify": p.spotify.display,
+                "spotify_artists": p.spotify.artist_str,
+                "spotify_title": p.spotify.title,
                 "status": p.status.name.lower(),  # found / probable
                 "score": p.result.score,
                 # The durations are shown under each name, only when they differ.

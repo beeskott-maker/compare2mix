@@ -130,6 +130,8 @@
   th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .note.alert { color: var(--ko); font-weight: 600; margin-top: 4px; font-family: var(--font-ui); }
+  .sp-artist { font-weight: 600; }
+  .sp-title { color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
   .chip { font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 6px; border-radius: 5px; background: var(--chip); color: var(--muted); white-space: nowrap; }
   .chip.fmt { background: var(--fg); color: var(--panel); }
@@ -812,7 +814,8 @@ function renderRecap() {
       cb.addEventListener("change", () => { m.on = cb.checked; updateStart(); });
       const main = el("tr", { class: m.durations ? "has-sub" : null },
         el("td", {}, cb),
-        el("td", {}, m.spotify),
+        el("td", {}, el("div", { class: "sp-artist" }, m.spotify_artists),
+          el("div", { class: "sp-title" }, m.spotify_title)),
         el("td", { class: "eq", "aria-hidden": "true" }, "="),
         el("td", { class: "file" }, m.new_name || m.name, audioChips(m.audio)),
         el("td", {}, genreInput(m)),
