@@ -598,7 +598,9 @@ function updateResetCopied() {
   $("resetCopied").hidden = !d || !d.results.some((r) => r.status === "missing" && copiedLinks.has(r.key));
 }
 $("resetCopied").addEventListener("click", () => {
-  copiedLinks.clear();
+  // Only the list on screen: the other one keeps its greyed cards.
+  const absent = state.view === "absent";
+  for (const k of [...copiedLinks]) if (k.startsWith("absent:") === absent) copiedLinks.delete(k);
   render();
 });
 // The two clickable tiles choose the list below: new tracks (default) or
@@ -650,15 +652,31 @@ async function renderAbsent() {
   }
   if ((state.view || "new") !== "absent") return;
   const list = state.absent.tracks;
-  $("results").replaceChildren(...(list.length ? list.map((t) => el("div", { class: "card missing" },
-    el("div", { class: "line1" },
+  const keyOf = (t) => "absent:" + (t.location || t.display);
+  const refreshReset = () => { $("resetCopied").hidden = !list.some((t) => copiedLinks.has(keyOf(t))); };
+  // Greyed out once copied, like the other list (this session only).
+  const absentCard = (t) => {
+    const k = keyOf(t);
+    const c = el("div", { class: "card missing" + (copiedLinks.has(k) ? " copied" : "") });
+    c.append(el("div", { class: "line1" },
       el("a", { href: "#", class: "sp", title: "Cliquer pour copier « artiste titre »",
         onclick: async (e) => {
           e.preventDefault();
-          try { await copyText(t.copy); toast("Copié : " + t.copy); } catch (err) { toast(err.message, true); }
+          try {
+            await copyText(t.copy);
+            toast("Copié : " + t.copy);
+            copiedLinks.add(k); c.classList.add("copied"); refreshReset();
+          } catch (err) { toast(err.message, true); }
         } }, t.display),
-      el("span", { class: "muted" }, mmss(t.duration)))))
+      el("span", { class: "muted" }, mmss(t.duration)),
+      el("span", { class: "copied-mark" }, "✓ copié · ",
+        el("button", { class: "linkbtn", title: "Ne plus griser ce morceau",
+          onclick: () => { copiedLinks.delete(k); c.classList.remove("copied"); refreshReset(); } }, "réactiver"))));
+    return c;
+  };
+  $("results").replaceChildren(...(list.length ? list.map(absentCard)
     : [el("div", { class: "empty" }, "Tous les morceaux de ta collection sont sur la clé.")]));
+  refreshReset();
 }
 
 // Missing tracks whose Spotify link was copied: greyed out while the page is
