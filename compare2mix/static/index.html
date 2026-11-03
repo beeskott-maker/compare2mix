@@ -103,7 +103,9 @@
   .card { padding: 9px 12px; border-radius: 8px; background: var(--bg); border-left: 3px solid var(--muted); }
   .card.missing { border-left-color: var(--ko); }
   .card.copied { opacity: .45; border-left-color: var(--muted); }
-  .card.copied .line1::after { content: "✓ lien copié"; font-size: 12px; color: var(--muted); }
+  .copied-mark { display: none; font-size: 12px; color: var(--muted); }
+  .card.copied .copied-mark { display: inline; }
+  .copied-mark button { font-size: 12px; }
   .card.probable { border-left-color: var(--warn); }
   .card.found { border-left-color: var(--ok); }
   .line1 { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
@@ -268,7 +270,7 @@
           <h2>Morceaux manquants</h2>
           <p class="lead">Playlist <b id="plName"></b> · <span id="plCount"></span> morceaux. Clique sur un titre pour copier son lien Spotify.</p>
         </div>
-        <div class="row"><button class="btn" id="copyList">Copier la liste</button><button class="btn" id="exportCsv">Exporter CSV</button></div>
+        <div class="row"><button class="btn" id="resetCopied" hidden>Tout réactiver</button><button class="btn" id="copyList">Copier la liste</button><button class="btn" id="exportCsv">Exporter CSV</button></div>
       </div>
       <div class="tabs" id="tabs">
         <button class="tab ko" data-filter="missing">❌ Manquants <span></span></button>
@@ -572,6 +574,15 @@ async function compare(refresh) {
   render();
   updateStepper();
 }
+// "Tout réactiver": shown while some missing tracks are greyed out.
+function updateResetCopied() {
+  const d = state.data;
+  $("resetCopied").hidden = !d || !d.results.some((r) => r.status === "missing" && copiedLinks.has(r.key));
+}
+$("resetCopied").addEventListener("click", () => {
+  copiedLinks.clear();
+  render();
+});
 $("copyList").addEventListener("click", async () => {
   if (!state.data) return;
   const lines = state.data.results.filter((r) => r.status === "missing").map((r) => r.spotify.display);
@@ -590,6 +601,7 @@ function render() {
   const c = { found: 0, probable: 0, missing: 0 };
   for (const r of d.results) c[r.status]++;
   $("factMissing").textContent = c.missing;
+  updateResetCopied();
   document.querySelectorAll("#tabs .tab").forEach((t) => {
     t.querySelector("span").textContent = c[t.dataset.filter];
     t.classList.toggle("active", t.dataset.filter === state.filter);
@@ -601,13 +613,13 @@ function render() {
     : [el("div", { class: "empty" }, state.text ? "Aucun résultat pour ce filtre." : "Rien dans cette catégorie.")]));
 }
 
-// Missing tracks whose Spotify link was copied: greyed out, remembered in this browser.
-const copiedLinks = (() => {
-  try { return new Set(JSON.parse(localStorage.getItem("c2m.copied") || "[]")); } catch { return new Set(); }
-})();
+// Missing tracks whose Spotify link was copied: greyed out while the page is
+// open only (copying a link does not mean the track was bought).
+const copiedLinks = new Set();
+try { localStorage.removeItem("c2m.copied"); } catch { /* older versions kept it */ }
 function rememberCopied(key) {
   copiedLinks.add(key);
-  try { localStorage.setItem("c2m.copied", JSON.stringify([...copiedLinks])); } catch { /* private mode */ }
+  $("resetCopied").hidden = false;
 }
 
 function card(r) {
@@ -631,6 +643,10 @@ function card(r) {
     : el("span", { class: "sp" }, r.spotify.display);
   c.append(el("div", { class: "line1" }, spTitle,
     el("span", { class: "muted" }, mmss(r.spotify.duration)),
+    r.status === "missing" ? el("span", { class: "copied-mark" }, "✓ lien copié · ",
+      el("button", { class: "linkbtn", title: "Ne plus griser ce morceau",
+        onclick: () => { copiedLinks.delete(r.key); c.classList.remove("copied"); updateResetCopied(); } },
+        "réactiver")) : null,
     r.method === "import" ? el("span", { class: "badge import" }, "📥 téléchargé")
       : r.method === "manuel" ? el("span", { class: "badge manual" }, "choisi par toi")
       : r.match ? el("span", { class: "badge" }, `${r.method === "ISRC" ? "ISRC" : "score"} ${Math.round(r.score)}`) : null));
