@@ -52,6 +52,27 @@ def _name_like(segment: str) -> bool:
     return bool(seg) and len(seg.split()) <= 6 and not is_version_info(seg)
 
 
+def _shuffled_variants(track: Track, segs: list[str]) -> list[_Prepared]:
+    """Artist, title and version mixed up across the fields, e.g. Artist="Lauer
+    Remix", Title="Kid Simius - Fabrica de Baile", or Artist="Fabrica de Baile",
+    Title="Lauer Remix - Kid Simius". The pieces (title segments and artists)
+    are put back together: the version piece stays the version, and each other
+    piece is tried as the title, the rest being the artists."""
+    parts = [p.strip() for p in segs if p.strip()] + [a for a in track.artists if a.strip()]
+    if not 3 <= len(parts) <= 5:
+        return []
+    versions = [p for p in parts if is_version_info(p)]
+    others = [p for p in parts if not is_version_info(p)]
+    if len(versions) > 1 or not 2 <= len(others) <= 4:
+        return []
+    suffix = f" - {versions[0]}" if versions else ""
+    return [
+        _prepare(track, title=title + suffix, artists=others[:i] + others[i + 1:],
+                 penalty=SWAP_PENALTY, note="artiste, titre et version mélangés dans Rekordbox")
+        for i, title in enumerate(others)
+    ]
+
+
 def _library_variants(track: Track) -> list[_Prepared]:
     """Interpretations of a library track.
 
@@ -69,6 +90,7 @@ def _library_variants(track: Track) -> list[_Prepared]:
             penalty=SWAP_PENALTY, note="titre et artiste inversés dans Rekordbox",
         ))
     segs = track.title.split(" - ")
+    variants += _shuffled_variants(track, segs)
     if len(segs) < 2:
         return variants
     first, last = segs[0], segs[-1]
@@ -117,6 +139,9 @@ def _score(sp: _Prepared, rb: _Prepared) -> tuple[float, dict[str, float]]:
     if title < 60 or artist < 45:
         total = min(total, PROBABLE_THRESHOLD - 0.1)
     elif title < 75 or artist < 60:
+        total = min(total, FOUND_THRESHOLD - 0.1)
+    # Two different remixes/edits of the same title are never "sure".
+    if sp.parsed.version_key and rb.parsed.version_key and version < 90:
         total = min(total, FOUND_THRESHOLD - 0.1)
     return min(total, 100.0), {"title": title, "artist": artist, "version": version}
 

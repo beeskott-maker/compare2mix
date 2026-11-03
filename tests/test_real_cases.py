@@ -87,3 +87,19 @@ def test_self_titled_track():
     assert r.status == Status.FOUND and r.match.source_id == "iam"
     # Without the self-titled track in the library, the other one is not a match.
     assert Matcher(lib[:1]).match(Track("Alloy Mental", ["Alloy Mental"])).status == Status.MISSING
+
+
+def test_fields_mixed_up_in_rekordbox():
+    # Three entries of the same track in the user's collection, fields shuffled.
+    sp = Track("Fabrica de Baile - Lauer Remix", ["Kid Simius", "Lauer"], source_id="spotify:track:fdb")
+    for lib in [Track("Kid Simius - Fabrica de Baile", ["Lauer Remix"], location="/a"),
+                Track("Fabrica de Baile - Lauer Remix", ["Kid Simius", "Lauer"], location="/b"),
+                Track("Lauer Remix - Kid Simius", ["Fabrica de Baile"], location="/c")]:
+        assert Matcher([lib]).match(sp).status == Status.FOUND, lib.display
+
+
+def test_other_remix_is_never_sure():
+    sp = Track("Fabrica de Baile - Lauer Remix", ["Kid Simius", "Lauer"], source_id="spotify:track:fdb")
+    for lib in [Track("Fabrica de Baile - Other Remix", ["Kid Simius"], location="/d"),
+                Track("Kid Simius - Fabrica de Baile", ["Other Remix"], location="/e")]:
+        assert Matcher([lib]).match(sp).status == Status.PROBABLE, lib.display
