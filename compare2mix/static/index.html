@@ -143,6 +143,7 @@
   button.play.on { background: var(--fg); color: var(--panel); }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; margin-left: 32px; }
   .chip { font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 6px; border-radius: 5px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+  .chip.absent { display: inline-block; margin-top: 4px; background: var(--warn-bg); color: var(--warn); }
   .chip.fmt { background: var(--fg); color: var(--panel); }
   tr.has-sub td { border-bottom: none; padding-bottom: 2px; }
   tr.sub td { padding-top: 0; }
@@ -931,14 +932,17 @@ function renderRecap() {
   const r = state.recap;
   $("recapDir").textContent = r.downloads_dir;
   const n = r.matches.length;
-  const pct = r.missing ? Math.min(100, (n / r.missing) * 100) : 0;
+  const nAbsent = r.matches.filter((m) => m.kind === "absent").length;
+  const nSpotify = n - nAbsent;
+  const pct = r.missing ? Math.min(100, (nSpotify / r.missing) * 100) : 0;
   const dest = r.destination;
   const verb = dest.keep_original ? "copiés (l'original reste dans Téléchargements)" : "déplacés (ils quittent Téléchargements)";
   const keyName = (dest.volume || "").split("/").pop();
   const parts = [
     el("div", { class: "stack", style: "gap:8px" },
-      el("div", { class: "ratio" }, el("span", { class: "big" }, n), el("span", { class: "of" }, `/ ${r.missing} manquants retrouvés`)),
-      el("div", { class: "meter", "aria-hidden": "true" }, el("i", { style: `width:${pct}%` }))),
+      el("div", { class: "ratio" }, el("span", { class: "big" }, nSpotify), el("span", { class: "of" }, `/ ${r.missing} manquants retrouvés`)),
+      el("div", { class: "meter", "aria-hidden": "true" }, el("i", { style: `width:${pct}%` })),
+      nAbsent ? el("div", { class: "note" }, `+ ${nAbsent} / ${r.absent} ${nAbsent > 1 ? "tracks absents" : "track absent"} de la clé ${keyName} retrouvé${nAbsent > 1 ? "s" : ""}`) : null),
   ];
   if (n) {
     const rows = r.matches.flatMap((m, i) => {
@@ -948,7 +952,8 @@ function renderRecap() {
       const main = el("tr", { class: m.durations ? "has-sub" : null },
         el("td", {}, cb),
         el("td", {}, el("div", { class: "sp-title" }, m.spotify_title),
-          el("div", { class: "sp-artist" }, m.spotify_artists)),
+          el("div", { class: "sp-artist" }, m.spotify_artists),
+          m.kind === "absent" ? el("span", { class: "chip absent" }, "absent de la clé") : null),
         el("td", { class: "eq", "aria-hidden": "true" }, "="),
         el("td", { class: "file" }, el("div", { class: "fname" }, playButton(m), el("span", {}, m.new_name || m.name)),
           audioChips(m.audio)),

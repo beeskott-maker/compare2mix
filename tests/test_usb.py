@@ -218,3 +218,20 @@ def test_key_absent_list_skips_rekordbox_samples(server, volumes):
     t = next(t for t in data["tracks"] if t["display"] == app.collection[1].display)
     assert t["copy"] == " ".join([*app.collection[1].artists, app.collection[1].title])
     assert app.key_stats()["absent"] == 7
+
+
+def test_recap_also_finds_tracks_absent_from_key(server):
+    tmp, key, app, call = server
+    # "Deadmau5 – Strobe" is in Rekordbox but its file is on the Mac, not on the key.
+    strobe = app.collection[0]
+    assert call("/api/key-absent")["tracks"] and strobe.location.startswith("/Users/")
+    src = make_wav(tmp / "Downloads" / "Deadmau5 - Strobe.wav", seconds=637)
+    r = call("/api/recap?playlist=1xZn2Qs4ytrn5EfOGJDxft")
+    m = next(m for m in r["matches"] if m["source"] == str(src))
+    assert (m["kind"], m["spotify_key"], m["spotify_title"]) == ("absent", strobe.key, "Strobe")
+    absent_before = r["absent"]
+    res = call("/api/import", {"source": str(src), "spotify_key": m["spotify_key"], "genre": "Progressive House"})
+    assert res["file"] == str(key / "Musique" / "Deadmau5 - Strobe.wav")
+    # Back on the key: no longer listed nor counted as absent.
+    keys = {t["display"] for t in call("/api/key-absent")["tracks"]}
+    assert strobe.display not in keys and app.key_stats()["absent"] == absent_before - 1

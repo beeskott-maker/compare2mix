@@ -231,10 +231,13 @@ class App:
         if not root:
             return None, False, []
         mounted = importer.is_available(root)
+        # Tracks whose file compare2mix already put on the key (step 5).
+        filed = {i.spotify_key for i in self.imports.imported
+                 if not importer.is_available(i.file) or os.path.exists(i.file)}
         out = []
         for t in self.collection:
             loc = t.location
-            if loc and _is_rekordbox_sample(loc):
+            if (loc and _is_rekordbox_sample(loc)) or t.key in filed:
                 continue
             if not loc:
                 out.append((t, "am"))
@@ -412,6 +415,16 @@ class App:
     def _imported_files(self) -> set[str]:
         return {i.file for i in self.imports.imported}
 
+    def _find_target(self, key: str) -> Track:
+        """A missing Spotify track, or a Rekordbox track absent from the key."""
+        try:
+            return self._find_spotify_track(key)
+        except ApiError:
+            for t in self.collection:
+                if t.key == key:
+                    return t
+            raise
+
     def _find_spotify_track(self, key: str) -> Track:
         with self.lock:
             for entry in self.playlists.values():
@@ -499,7 +512,8 @@ class App:
                                              move=not settings["keep_original"])
         except importer.VolumeUnavailable as e:
             raise ApiError(f"{e} Branche-la puis réessaie.", 409, "volume") from e
-        self.decisions.confirm(sp.key, Track(entry.title, entry.artists, location=entry.file).key)
+        if sp.key.startswith("spotify:"):
+            self.decisions.confirm(sp.key, Track(entry.title, entry.artists, location=entry.file).key)
         self._rebuild_library()
         return entry
 
@@ -519,7 +533,9 @@ class App:
             paths = [p for p in importer.scan_folder(settings["downloads_dir"])
                      if not self.imports.is_known(str(p))]
             files = [self._read_file(p) for p in paths]
-        proposals = importer.propose(files, missing)
+        _, _, absent = self._key_absent()
+        absent_keys = {t.key for t, _ in absent}
+        proposals = importer.propose(files, missing + [t for t, _ in absent])
         matched_files = {p.file.location for p in proposals}
         matched_tracks = {p.spotify.key for p in proposals}
         week_ago = time.time() - 7 * 86400
@@ -538,6 +554,8 @@ class App:
                 "new_name": importer.target_name(p.file, p.spotify,
                                                  Path(p.file.location).suffix.lower()),
                 "spotify_key": p.spotify.key,
+                # "spotify": missing from Rekordbox; "absent": in Rekordbox, not on the key
+                "kind": "absent" if p.spotify.key in absent_keys else "spotify",
                 "spotify": p.spotify.display,
                 "spotify_artists": p.spotify.artist_str,
                 "spotify_title": p.spotify.title,
@@ -549,6 +567,7 @@ class App:
             } for p in sorted(proposals, key=lambda p: -p.result.score)],
             "unmatched": unmatched[:30],
             "still_missing": [t.display for t in missing if t.key not in matched_tracks],
+            "absent": len(absent),
             "destination": {
                 "music_dir": settings["music_dir"],
                 "available": settings["music_dir_available"],
@@ -586,7 +605,7 @@ class App:
 
     def genre(self, spotify_key: str) -> dict:
         """Step 4: detailed genre of a missing track, from Discogs."""
-        track = self._find_spotify_track(spotify_key)
+        track = self._find_target(spotify_key)
         try:
             return self._discogs_client().genre_for(track)
         except discogs.DiscogsError as e:
@@ -621,7 +640,7 @@ class App:
         if self.imports.is_known(source):
             raise ApiError("Ce fichier a déjà été traité.")
         with self.scan_lock:
-            file, sp = self._read_file(path), self._find_spotify_track(spotify_key)
+            file, sp = self._read_file(path), self._find_target(spotify_key)
             wanted = importer.target_name(file, sp, path.suffix.lower())
             entry = self._import(file, sp)
         # Genre chosen in step 4 (replaces the file's own); a file without tags
