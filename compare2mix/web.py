@@ -222,23 +222,47 @@ class App:
         roots.pop(None, None)
         return roots.most_common(1)[0][0] if roots else None
 
-    def key_stats(self) -> dict | None:
-        """Tracks of the Rekordbox collection that are not on the USB key: files
-        elsewhere (Mac, Apple Music links…) and, when the key is plugged in,
-        files that should be on it but are not."""
+    def _key_absent(self) -> tuple[str | None, bool, list[tuple[Track, str]]]:
+        """Tracks of the Rekordbox collection that are not on the USB key, with
+        where they are: "mac" (file elsewhere), "am" (no file: Apple Music
+        link…) or "lost" (should be on the plugged-in key but is not).
+        The samples shipped with Rekordbox (…/rekordbox/Sampler/…) are left out."""
         root = self._key_root()
         if not root:
-            return None
+            return None, False, []
         mounted = importer.is_available(root)
-        absent = 0
+        out = []
         for t in self.collection:
             loc = t.location
-            if not loc or importer.volume_root(loc) != root:
-                absent += 1
+            if loc and _is_rekordbox_sample(loc):
+                continue
+            if not loc:
+                out.append((t, "am"))
+            elif importer.volume_root(loc) != root:
+                out.append((t, "mac"))
             elif mounted and not os.path.exists(loc):
-                absent += 1
+                out.append((t, "lost"))
+        return root, mounted, out
+
+    def key_stats(self) -> dict | None:
+        root, mounted, absent = self._key_absent()
+        if not root:
+            return None
+        tracks = sum(1 for t in self.collection if not (t.location and _is_rekordbox_sample(t.location)))
         return {"name": os.path.basename(root), "path": root, "mounted": mounted,
-                "absent": absent, "on_key": len(self.collection) - absent}
+                "absent": len(absent), "on_key": tracks - len(absent)}
+
+    def key_absent(self) -> dict:
+        """Step 3, second list: the tracks counted in "absents de la clé"."""
+        root, mounted, absent = self._key_absent()
+        return {"key": os.path.basename(root) if root else None, "mounted": mounted,
+                "tracks": sorted(({"artists": t.artist_str, "title": t.title, "display": t.display,
+                                   "duration": round(t.duration_s) if t.duration_s else None,
+                                   "where": where, "location": t.location,
+                                   # what a click copies, to search for it
+                                   "copy": " ".join([*t.artists, t.title]).strip()}
+                                  for t, where in absent),
+                                 key=lambda d: (d["artists"].lower(), d["title"].lower()))}
 
     def _collection_locations(self) -> set[str]:
         return {t.location for t in self.collection if t.location}
@@ -631,6 +655,11 @@ class App:
         return buf.getvalue(), f"compare2mix - {safe or pid}.csv"
 
 
+def _is_rekordbox_sample(location: str) -> bool:
+    """Sounds installed with Rekordbox (sampler presets), not tracks of the user."""
+    return "/rekordbox/sampler/" in location.replace("\\", "/").lower()
+
+
 def _mmss(seconds: float) -> str:
     seconds = int(round(seconds))
     return f"{seconds // 60}:{seconds % 60:02d}"
@@ -784,6 +813,8 @@ def make_handler(app: App):
                 return self._run(lambda: self._json(app.recap(q.get("playlist", ""))))
             if path == "/api/import-settings":
                 return self._run(lambda: self._json(app.import_settings()))
+            if path == "/api/key-absent":
+                return self._run(lambda: self._json(app.key_absent()))
             if path == "/api/audio":
                 return self._run(lambda: self._send_audio(app.downloads_file(q.get("source", ""))))
             if path == "/api/energy":

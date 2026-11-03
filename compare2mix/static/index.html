@@ -92,6 +92,11 @@
   .fact { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
   .fact b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
   .fact span { color: var(--muted); font-size: 13px; }
+  button.fact { font: inherit; color: inherit; text-align: left; background: transparent; border: 2px solid var(--line); cursor: pointer; transition: border-color .15s, background-color .15s; }
+  button.fact:hover { border-color: var(--accent); background: var(--bg); }
+  button.fact.on { border-color: var(--accent); background: var(--accent-soft); }
+  button.fact span::after { content: " →"; opacity: 0; }
+  button.fact:hover span::after, button.fact.on span::after { opacity: 1; }
   .tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .tab { border: 0; border-radius: 999px; padding: 4px 12px; font: 600 14px var(--font-ui); background: var(--chip); color: var(--muted); cursor: pointer; }
   .tab.ko { background: var(--ko-bg); color: var(--ko); }
@@ -268,17 +273,17 @@
       </div>
       <div class="facts">
         <div class="fact"><b id="factTracks">–</b><span>tracks dans Rekordbox</span></div>
-        <div class="fact"><b id="factMissing">–</b><span>nouveaux titres à télécharger</span></div>
-        <div class="fact" id="factKeyBox"><b id="factKey">–</b><span id="factKeyLbl">tracks absents de la clé</span></div>
+        <button class="fact pick on" data-view="new" aria-pressed="true"><b id="factMissing">–</b><span>nouveaux titres à télécharger</span></button>
+        <button class="fact pick" data-view="absent" aria-pressed="false" id="factKeyBox"><b id="factKey">–</b><span id="factKeyLbl">tracks absents de la clé</span></button>
       </div>
     </div>
     <div class="panel stack">
       <div class="spread">
         <div>
-          <h2>Morceaux manquants</h2>
-          <p class="lead">Playlist <b id="plName"></b> · <span id="plCount"></span> morceaux. Clique sur un titre pour copier son lien Spotify.</p>
+          <h2 id="listTitle">Vus sur Spotify mais absents de Rekordbox</h2>
+          <p class="lead" id="listLead">Playlist <b id="plName"></b> · <span id="plCount"></span> morceaux. Clique sur un titre pour copier son lien Spotify.</p>
         </div>
-        <div class="row"><button class="btn" id="resetCopied" hidden>Tout réactiver</button><button class="btn" id="copyList">Copier la liste</button><button class="btn" id="exportCsv">Exporter CSV</button></div>
+        <div class="row"><button class="btn" id="resetCopied" hidden>Tout réactiver</button></div>
       </div>
       <div class="tabs" id="tabs">
         <button class="tab ko" data-filter="missing">❌ Manquants <span></span></button>
@@ -549,6 +554,8 @@ function renderLibrary() {
   $("libWhere").textContent = lib.origin === "upload"
     ? `fichier déposé · ${when}` : `trouvé dans Téléchargements · exporté le ${when}`;
   $("factTracks").textContent = lib.count;
+  state.absent = null; // library (re)loaded: the list of tracks absent from the key changes
+  if (!lib.key && state.view === "absent") state.view = "new";
   $("factKeyBox").hidden = !lib.key;
   if (lib.key) {
     $("factKey").textContent = lib.key.absent;
@@ -591,19 +598,26 @@ $("resetCopied").addEventListener("click", () => {
   copiedLinks.clear();
   render();
 });
-$("copyList").addEventListener("click", async () => {
-  if (!state.data) return;
-  const lines = state.data.results.filter((r) => r.status === "missing").map((r) => r.spotify.display);
-  try { await copyText(lines.join("\n")); toast(plural(lines.length, "morceau copié", "morceaux copiés")); }
-  catch { toast("Copie impossible", true); }
-});
-$("exportCsv").addEventListener("click", () => {
-  if (state.data) window.location = "/api/export.csv?playlist=" + encodeURIComponent(state.data.id);
-});
+// The two clickable tiles choose the list below: new tracks (default) or
+// tracks of the collection that are not on the USB key.
+document.querySelectorAll("button.fact.pick").forEach((b) => b.addEventListener("click", () => {
+  state.view = b.dataset.view;
+  render();
+}));
 document.querySelectorAll("#tabs .tab").forEach((t) => t.addEventListener("click", () => { state.filter = t.dataset.filter; render(); }));
 $("filterText").addEventListener("input", (e) => { state.text = e.target.value.toLowerCase(); render(); });
 
 function render() {
+  const view = state.view || "new";
+  document.querySelectorAll("button.fact.pick").forEach((b) => {
+    const on = b.dataset.view === view;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on);
+  });
+  $("tabs").hidden = view !== "new";
+  $("listLead").hidden = view !== "new";
+  if (view === "absent") return renderAbsent();
+  $("listTitle").textContent = "Vus sur Spotify mais absents de Rekordbox";
   const d = state.data;
   if (!d) return;
   const c = { found: 0, probable: 0, missing: 0 };
@@ -619,6 +633,29 @@ function render() {
     .filter((r) => !state.text || (r.spotify.display + " " + (r.match ? r.match.display : "")).toLowerCase().includes(state.text));
   $("results").replaceChildren(...(list.length ? list.map(card)
     : [el("div", { class: "empty" }, state.text ? "Aucun résultat pour ce filtre." : "Rien dans cette catégorie.")]));
+}
+
+// Second list: tracks of the collection not on the key (click = copy "artist title").
+async function renderAbsent() {
+  const key = state.status && state.status.library && state.status.library.key;
+  $("listTitle").textContent = `Vus dans Rekordbox mais absents de la clé ${key ? key.name : ""}`.trim();
+  $("resetCopied").hidden = true;
+  if (!state.absent) {
+    $("results").replaceChildren(el("div", { class: "empty" }, el("span", { class: "spinner" }), " Chargement…"));
+    try { state.absent = await api("/api/key-absent"); }
+    catch (e) { $("results").replaceChildren(el("div", { class: "msg ko" }, e.message)); return; }
+  }
+  if ((state.view || "new") !== "absent") return;
+  const list = state.absent.tracks;
+  $("results").replaceChildren(...(list.length ? list.map((t) => el("div", { class: "card missing" },
+    el("div", { class: "line1" },
+      el("a", { href: "#", class: "sp", title: "Cliquer pour copier « artiste titre »",
+        onclick: async (e) => {
+          e.preventDefault();
+          try { await copyText(t.copy); toast("Copié : " + t.copy); } catch (err) { toast(err.message, true); }
+        } }, t.display),
+      el("span", { class: "muted" }, mmss(t.duration)))))
+    : [el("div", { class: "empty" }, "Tous les morceaux de ta collection sont sur la clé.")]));
 }
 
 // Missing tracks whose Spotify link was copied: greyed out while the page is
@@ -662,6 +699,7 @@ function card(r) {
     el("span", { class: "muted" }, "  " + mmss(r.match.duration))));
   if (r.notes.length) c.append(el("ul", { class: "notes" }, r.notes.map((n) => el("li", {}, n))));
 
+  if (r.status === "missing") return c; // one line: title (click = copy link) and duration
   const actions = el("div", { class: "actions" });
   const act = (label, action, libKey) =>
     el("button", { class: "btn small", onclick: (e) => decide(e.currentTarget, r.key, action, libKey) }, label);

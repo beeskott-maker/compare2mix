@@ -197,3 +197,24 @@ def test_suggested_music_dir_from_collection(server):
     # The sample collection lives in /Users/dj/Music; the plugged key is suggested too.
     assert s["suggested_music_dirs"][0] == "/Users/dj/Music"
     assert str(key) in s["suggested_music_dirs"]
+
+
+def test_key_absent_list_skips_rekordbox_samples(server, volumes):
+    tmp, key, app, call = server
+    (key / "Musique").mkdir(exist_ok=True)
+    app.collection[0].location = str(key / "Musique" / "gone.mp3")  # lost on the plugged key
+    app.collection[1].location = ""  # Apple Music link: no file
+    app.collection[2].location = "/Users/dj/Music/rekordbox/Sampler/PRESET/House1.wav"  # sample
+    data = call("/api/key-absent")
+    where = {t["display"]: t["where"] for t in data["tracks"]}
+    assert data["key"] == "DJ KEY" and len(where) == 7  # 8 tracks - 1 sample
+    assert where[app.collection[0].display] == "lost"
+    assert where[app.collection[1].display] == "am"
+    assert app.collection[2].display not in where
+    assert set(where.values()) == {"lost", "am"}  # the other sample tracks have no file
+    app.collection[3].location = "/Users/dj/Music/elsewhere.mp3"
+    assert {t["display"]: t["where"] for t in call("/api/key-absent")["tracks"]}[
+        app.collection[3].display] == "mac"
+    t = next(t for t in data["tracks"] if t["display"] == app.collection[1].display)
+    assert t["copy"] == " ".join([*app.collection[1].artists, app.collection[1].title])
+    assert app.key_stats()["absent"] == 7
