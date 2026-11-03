@@ -901,6 +901,8 @@ def make_handler(app: App):
             q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
             path = url.path
 
+            if path in ("/favicon.svg", "/favicon.ico"):
+                return self._send(200, (STATIC_DIR / "favicon.svg").read_bytes(), "image/svg+xml")
             if path in ("/", "/index.html"):
                 body = (STATIC_DIR / "index.html").read_bytes()
                 return self._send(200, body, "text/html; charset=utf-8")

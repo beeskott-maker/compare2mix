@@ -222,3 +222,9 @@ def test_quit_button_stops_the_server(server):
     app.on_quit = stopped.set
     assert call(base, "/api/quit", {}) == {"ok": True}
     assert stopped.wait(2)
+
+
+def test_favicon(server):
+    base, _ = server
+    with urllib.request.urlopen(base + "/favicon.svg") as r:
+        assert r.headers["Content-Type"] == "image/svg+xml" and b"<svg" in r.read()
