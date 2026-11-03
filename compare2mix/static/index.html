@@ -1078,15 +1078,18 @@ function renderRecap() {
   const n = r.matches.length;
   const nAbsent = r.matches.filter((m) => m.kind === "absent").length;
   const nSpotify = n - nAbsent;
-  const pct = r.missing ? Math.min(100, (nSpotify / r.missing) * 100) : 0;
   const dest = r.destination;
   const verb = dest.keep_original ? "copiés (l'original reste dans Téléchargements)" : "déplacés (ils quittent Téléchargements)";
   const keyName = (dest.volume || "").split("/").pop();
+  // One counter and bar per list: new tracks, and tracks absent from the key.
+  const counter = (found, total, label) => el("div", { class: "stack", style: "gap:6px; flex: 1 1 280px" },
+    el("div", { class: "ratio" }, el("span", { class: "big" }, found), el("span", { class: "of" }, `/ ${total} ${label}`)),
+    el("div", { class: "meter", role: "progressbar", "aria-label": label, "aria-valuemin": "0", "aria-valuemax": String(total), "aria-valuenow": String(found) },
+      el("i", { style: `width:${total ? Math.min(100, (found / total) * 100) : 0}%` })));
   const parts = [
-    el("div", { class: "stack", style: "gap:8px" },
-      el("div", { class: "ratio" }, el("span", { class: "big" }, nSpotify), el("span", { class: "of" }, `/ ${r.missing} manquants retrouvés`)),
-      el("div", { class: "meter", "aria-hidden": "true" }, el("i", { style: `width:${pct}%` })),
-      nAbsent ? el("div", { class: "note" }, `+ ${nAbsent} / ${r.absent} ${nAbsent > 1 ? "tracks absents" : "track absent"} de la clé ${keyName} retrouvé${nAbsent > 1 ? "s" : ""}`) : null),
+    el("div", { class: "row", style: "gap:16px 32px; align-items:flex-start" },
+      counter(nSpotify, r.missing, "nouveaux titres retrouvés"),
+      r.absent ? counter(nAbsent, r.absent, `absents de la clé ${keyName} retrouvés`.replace(/ $/, "")) : null),
   ];
   if (n) {
     const rows = r.matches.flatMap((m, i) => {
